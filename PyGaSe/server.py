@@ -146,6 +146,7 @@ class GameLoop:
     *update_game_state()* methods.
     '''
     def __init__(self, server: Server):
+        self.server = server
         self._game_loop_thread = threading.Thread()
         self.update_cycle_interval = 0.03
 
