@@ -29,8 +29,6 @@ class ConnectionStatus(PyGaSe.shared.TypeClass):
     WaitingForServer = 2
     Disconnected = 3
 
-    _counter = 4
-
 class Connection:
     '''
     Initialization of a *Connection* will open a connection to a BossFight GameService

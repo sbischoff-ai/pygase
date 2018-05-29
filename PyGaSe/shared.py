@@ -23,8 +23,8 @@ class TypeClass:
         '''
         Add a new named type to this enum-like class.
         '''
-        cls.__setattr__(name, cls._counter)
-        cls._counter += 1
+        counter = len(cls.__dict__)
+        setattr(cls, name, counter)
 
 class Sendable:
     '''
@@ -61,8 +61,6 @@ class GameStatus(TypeClass):
     Paused = 1
     Active = 2
 
-    _counter = 3
-
 class ActivityType(TypeClass):
     '''
     Enum class with the values:
@@ -73,8 +71,6 @@ class ActivityType(TypeClass):
     PauseGame = 1
     ResumeGame = 2
     JoinServer = 3
-    
-    _counter = 4
 
 class PackageType(TypeClass):
     '''
@@ -97,8 +93,6 @@ class PackageType(TypeClass):
     ServerResponse = 4
     ServerError = 5
 
-    _counter = 6
-
 class ErrorType(TypeClass):
     '''
     Enum class with the following values:
@@ -112,8 +106,6 @@ class ErrorType(TypeClass):
     RequestTimeout = 1
     UnpackError = 2
     RequestInvalid = 3
-
-    _counter = 4
 
 class ErrorMessage(Sendable):
     '''
