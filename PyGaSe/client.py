@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 '''
-This module mainly contains the *GameServiceConnection* class, which represents a connection to a
+This module mainly contains the *Connection* class, which represents a connection to a
 running GameService (meaning a game server). Use this to manage your server connections.
 
 **Note: If you want to connect to a server in another local network you must use the proper IPv4
@@ -11,15 +11,13 @@ which the *GameService* serves has to be properly forwarded within that network.
 import socket
 import threading
 import time
-from _typeclass import TypeClass
-import sharedGameData 
-import gameServiceProtocol as gsp
+import PyGaSe.shared
 
 REQUEST_TIMEOUT = 0.5
 CONNECTION_TIMEOUT = 5.0
 _BUFFER_SIZE = 1024
 
-class ConnectionStatus(TypeClass):
+class ConnectionStatus(PyGaSe.shared.TypeClass):
     '''
     Enum class with the following values:
     - *Connected*: Connection is running.
@@ -33,18 +31,18 @@ class ConnectionStatus(TypeClass):
 
     _counter = 4
 
-class GameServiceConnection:
+class Connection:
     '''
-    Initialization of a *GameServiceConnection* will open a connection to a BossFight GameService
+    Initialization of a *Connection* will open a connection to a BossFight GameService
     with the specified *server_address* as a tuple containing the IP-adress as a string and the
     port as an int. Check the *connection_status* attribute to get the status of the Connection as
     a *ConnectionStatus* attribute.
 
-    A running *GameServiceConnection* will request an update of *shared_game_state* from the server
+    A running *Connection* will request an update of *game_state* from the server
     every *update_cycle_interval* seconds.
     '''
     def __init__(self, server_address, closed=False):
-        self.shared_game_state = sharedGameData.SharedGameState()
+        self.game_state = PyGaSe.shared.GameState()
         self.server_address = server_address
         self._client_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
         self._client_socket.settimeout(REQUEST_TIMEOUT)
@@ -63,16 +61,16 @@ class GameServiceConnection:
         self.disconnect()
         self._client_socket.close()
 
-    def _send_and_recv(self, package: gsp._GameServicePackage):
+    def _send_and_recv(self, package: PyGaSe.shared.UDPPackage):
         # Send package to server ...
         self._client_socket.sendto(package.to_datagram(), self.server_address)
         # ... and get response if possible, otherwise create GameServiceError package
         try:
-            return gsp._GameServicePackage.from_datagram(self._client_socket.recv(_BUFFER_SIZE))
+            return PyGaSe.shared.UDPPackage.from_datagram(self._client_socket.recv(_BUFFER_SIZE))
         except socket.timeout:
-            return gsp._timeout_error('Request timed out.')
+            return PyGaSe.shared.timeout_error('Request timed out.')
         except ConnectionResetError:
-            return gsp._timeout_error('Server not found.')
+            return PyGaSe.shared.timeout_error('Server not found.')
 
     def connect(self):
         '''
@@ -107,7 +105,7 @@ class GameServiceConnection:
         '''
         return self.connection_status == ConnectionStatus.WaitingForServer
 
-    def post_client_activity(self, client_activity: sharedGameData.ClientActivity):
+    def post_client_activity(self, client_activity: PyGaSe.shared.ClientActivity):
         '''
         Sends the *ClientActivity* object to the server.
         '''
@@ -120,9 +118,9 @@ class GameServiceConnection:
         while time.time()-t_0 < CONNECTION_TIMEOUT and \
           not self.connection_status == ConnectionStatus.Disconnected:
             t_1 = time.time()
-            response = self._send_and_recv(gsp._game_state_request())
+            response = self._send_and_recv(PyGaSe.shared.game_state_request())
             if response.is_response():
-                self.shared_game_state = response.body
+                self.game_state = response.body
                 if not self.connection_status == ConnectionStatus.Disconnected:
                     self.connection_status = ConnectionStatus.Connected
                 return # Connection successful, leave _try_connect()
@@ -142,16 +140,16 @@ class GameServiceConnection:
             activities_to_post = self._polled_client_activities[:5] # First 5 activities in queue
             for activity in activities_to_post:
                 response = self._send_and_recv(
-                    gsp._post_activity_request(activity)
+                    PyGaSe.shared.post_activity_request(activity)
                 )
                 if response.is_response():
                     self._polled_client_activities.remove(activity)
             # Then get game state update
             response = self._send_and_recv(
-                gsp._game_state_update_request(self.shared_game_state.time_order)
+                PyGaSe.shared.game_state_update_request(self.game_state.time_order)
             )
             if response.is_response():
-                self.shared_game_state += response.body
+                self.game_state += response.body
             else:
                 #if response.is_error():
                 #    print(response.body.message)

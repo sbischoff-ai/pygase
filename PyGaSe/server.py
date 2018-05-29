@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 '''
-This module defines the *GameService* class, a server that can handle requests from
-a client's *GameServiceConnection* object and the *GameLoop*, which simulates the game logic.
+This module defines the *Server* class, a server that can handle requests from
+a client's *ServerConnection* object and the *GameLoop*, which simulates the game logic.
 
-**Note: The IP address you bind the GameService to is a local IP address from the
+**Note: The IP address you bind the Server to is a local IP address from the
 192.168.x.x address space. If you want computers outside your local network to be
 able to connect to your game server, you will have to forward the port from the local
 address your server is bound to to your external IPv4 address!**
@@ -13,36 +13,31 @@ import socketserver
 import threading
 import time
 import math
-from sharedGameData import \
-    GameStatus, SharedGameState, SharedGameStateUpdate, ActivityType, ClientActivity
-from umsgpack import InsufficientDataException
-import gameServiceProtocol as gsp
+import PyGaSe.shared
 
 UPDATE_CACHE_SIZE = 100
 
-class GameService(socketserver.ThreadingUDPServer):
+class Server(socketserver.ThreadingUDPServer):
     '''
     Threading UDP server that manages clients and processes requests.
     *game_loop_class* is your subclass of *GameLoop*, which implements the handling of activities
-    and the game state update function. *shared_game_state* is an instance of *SharedGameState* that
+    and the game state update function. *game_state* is an instance of *PyGaSe.shared.GameState* that
     holds all necessary initial data.
 
     Call *serve_forever*() in a seperate thread for the server to start handling requests from
-    *GameServiceConnection*s. Call *shutdown*() to stop it.
+    *ServerConnection*s. Call *shutdown*() to stop it.
 
     *game_loop* is the server's *GameLoop* object, which simulates the game logic and updates
-    the *shared_game_state*.
+    the *game_state*.
     '''
 
-    def __init__(self, ip_address: str, port: int, game_loop_class: type, shared_game_state: SharedGameState):
-        super().__init__((ip_address, port), _GameServiceRequestHandler)
-        self.shared_game_state = shared_game_state
+    def __init__(self, ip_address: str, port: int, game_loop_class: type, game_state: PyGaSe.shared.GameState):
+        super().__init__((ip_address, port), ServerRequestHandler)
+        self.game_state = game_state
         self._client_activity_queue = []
+        self._state_update_cache = []
         self._player_counter = 0
-        self.game_loop = GameLoop(
-            shared_game_state=self.shared_game_state,
-            _client_activity_queue=self._client_activity_queue,
-        )
+        self.game_loop = GameLoop(self)
         self._server_thread = threading.Thread()
 
     def start(self):
@@ -75,14 +70,14 @@ class GameService(socketserver.ThreadingUDPServer):
         '''
         return self.socket.getsockname()[1]
 
-class _GameServiceRequestHandler(socketserver.BaseRequestHandler):
+class ServerRequestHandler(socketserver.BaseRequestHandler):
     def handle(self):
         # Read out request
         try:
-            request = gsp._GameServicePackage.from_datagram(self.request[0])
-        except (InsufficientDataException, TypeError):
+            request = PyGaSe.shared.UDPPackage.from_datagram(self.request[0])
+        except TypeError:
             # if unpacking request failed send back error message and exit handle function
-            response = gsp._unpack_error('Server responded: Byte error.')
+            response = PyGaSe.shared.unpack_error('Server responded: Byte error.')
             self.request[1].sendto(response.to_datagram(), self.client_address)
             return
 
@@ -93,29 +88,29 @@ class _GameServiceRequestHandler(socketserver.BaseRequestHandler):
                 (upd for upd in self.server.game_loop._state_update_cache if upd > request.body),
                 request.body
             )
-            response = gsp._response(update)
+            response = PyGaSe.shared.response(update)
         elif request.is_post_activity_request():
             # Pausing or Resuming the game and joining a server must be possible outside
             # of the game loop:
-            if request.body.activity_type == ActivityType.PauseGame:
+            if request.body.activity_type == PyGaSe.shared.ActivityType.PauseGame:
                 self.server.game_loop.pause()
-                self.server.shared_game_state.time_order += 1
-                self.server.game_loop._cache_state_update(SharedGameStateUpdate(
-                    time_order=self.server.shared_game_state.time_order,
-                    game_status=GameStatus.Paused
+                self.server.game_state.time_order += 1
+                self.server.game_loop._cache_state_update(PyGaSe.shared.GameStateUpdate(
+                    time_order=self.server.game_state.time_order,
+                    game_status=PyGaSe.shared.GameStatus.Paused
                 ))
-            elif request.body.activity_type == ActivityType.ResumeGame:
-                self.server.shared_game_state.time_order += 1
-                self.server.game_loop._cache_state_update(SharedGameStateUpdate(
-                    time_order=self.server.shared_game_state.time_order,
-                    game_status=GameStatus.Active
+            elif request.body.activity_type == PyGaSe.shared.ActivityType.ResumeGame:
+                self.server.game_state.time_order += 1
+                self.server.game_loop._cache_state_update(PyGaSe.shared.GameStateUpdate(
+                    time_order=self.server.game_state.time_order,
+                    game_status=PyGaSe.shared.GameStatus.Active
                 ))
                 self.server.game_loop.start()
-            elif request.body.activity_type == ActivityType.JoinServer:
+            elif request.body.activity_type == PyGaSe.shared.ActivityType.JoinServer:
                 # A player dict is added to the game state. The id is unique for the
                 # server session (counting from 0 upwards).
-                update = SharedGameStateUpdate(
-                    time_order=self.server.shared_game_state.time_order + 1,
+                update = PyGaSe.shared.GameStateUpdate(
+                    time_order=self.server.game_state.time_order + 1,
                     players={
                         self.server._player_counter: {
                             'name': request.body.activity_data['name'],
@@ -125,18 +120,18 @@ class _GameServiceRequestHandler(socketserver.BaseRequestHandler):
                     }
                 )
                 self.server._player_counter += 1
-                self.server.shared_game_state += update
+                self.server.game_state += update
                 self.server.game_loop._cache_state_update(update)
             else:
                 # Any other kind of activity: add to the queue for the game loop
                 self.server._client_activity_queue.append(request.body)
-            response = gsp._response(None)
+            response = PyGaSe.shared.response(None)
         elif request.is_state_request():
             # respond by sending back the shared game state
-            response = gsp._response(self.server.shared_game_state)
+            response = PyGaSe.shared.response(self.server.game_state)
         else:
             # if none of the above were a match the request was invalid
-            response = gsp._request_invalid_error('Server responded: Request invalid.')
+            response = PyGaSe.shared.request_invalid_error('Server responded: Request invalid.')
 
         # Send response
         self.request[1].sendto(response.to_datagram(), self.client_address)
@@ -144,16 +139,13 @@ class _GameServiceRequestHandler(socketserver.BaseRequestHandler):
 class GameLoop:
     '''
     Class that can update a shared game state by running a game logic simulation thread.
-    It must be passed a *SharedGameState* and a list of *ClientActivity*s from the
-    *GameService* object which owns the *GameLoop*.
+    It must be passed a *PyGaSe.shared.GameState* and a list of *PyGaSe.shared.ClientActivity*s from the
+    *Server* object which owns the *GameLoop*.
 
     You should inherit from this class and implement the *handle_activity()* and
     *update_game_state()* methods.
     '''
-    def __init__(self, shared_game_state: SharedGameState, _client_activity_queue: list):
-        self._shared_game_state = shared_game_state
-        self._client_activity_queue = _client_activity_queue
-        self._state_update_cache = []
+    def __init__(self, server: Server):
         self._game_loop_thread = threading.Thread()
         self.update_cycle_interval = 0.03
 
@@ -164,7 +156,7 @@ class GameLoop:
         '''
         if not self._game_loop_thread.is_alive():
             self._game_loop_thread = threading.Thread(target=self._update_cycle)
-            self._shared_game_state.game_status = GameStatus.Active
+            self.server.game_state.game_status = PyGaSe.shared.GameStatus.Active
             self._game_loop_thread.start()
 
     def pause(self):
@@ -172,40 +164,40 @@ class GameLoop:
         Stops the game loop until *start()* is called.
         If the game loop is not currently running does nothing.
         '''
-        self._shared_game_state.game_status = GameStatus.Paused
+        self.server.game_state.game_status = PyGaSe.shared.GameStatus.Paused
 
     def _update_cycle(self):
         dt = self.update_cycle_interval
-        while not self._shared_game_state.is_paused():
+        while not self.server.game_state.is_paused():
             t = time.time()
             # Create update object and fill it with all necessary changes
-            update = SharedGameStateUpdate(self._shared_game_state.time_order + 1)
+            update = PyGaSe.shared.GameStateUpdate(self.server.game_state.time_order + 1)
             # Handle client activities first
-            activities_to_handle = self._client_activity_queue[:5]
+            activities_to_handle = self.server._client_activity_queue[:5]
             # Get first 5 activitys in queue
             for activity in activities_to_handle:
                 self.handle_activity(activity, update, dt)
-                del self._client_activity_queue[0]
+                del self.server._client_activity_queue[0]
                 # Should be safe, otherwise use *remove(activity)*
             self.update_game_state(update, dt)
             # Add the update to the game state and cache it for the clients
-            self._shared_game_state += update
+            self.server.game_state += update
             self._cache_state_update(update)
             dt = time.time() - t
             time.sleep(max(self.update_cycle_interval-dt, 0))
 
-    def handle_activity(self, activity: ClientActivity, update: SharedGameStateUpdate, dt):
+    def handle_activity(self, activity: PyGaSe.shared.ClientActivity, update: PyGaSe.shared.GameStateUpdate, dt):
         '''
         Override this method to implement handling of client activities. Any state changes should be
         written into the update argument of this method.
         '''
         raise NotImplementedError
-        #if activity.activity_type == ActivityType.MyActivtity:
+        #if activity.activity_type == PyGaSe.shared.ActivityType.MyActivtity:
         #    update.some_attribute = foo()
-        #elif activity.activity_type == ActivityType.MyOtherActivity:
+        #elif activity.activity_type == PyGaSe.shared.ActivityType.MyOtherActivity:
         #    update.other_attribute = bar()
 
-    def update_game_state(self, update: SharedGameStateUpdate, dt):
+    def update_game_state(self, update: PyGaSe.shared.GameStateUpdate, dt):
         '''
         Override to implement an iteration of your game logic simulation.
         State changes should be written into the update argument.
@@ -214,7 +206,7 @@ class GameLoop:
         '''
         raise NotImplementedError
 
-    def _cache_state_update(self, state_update: SharedGameStateUpdate):
-        self._state_update_cache.append(state_update)
-        if len(self._state_update_cache) > UPDATE_CACHE_SIZE:
-            self._state_update_cache = self._state_update_cache[1:]
+    def _cache_state_update(self, state_update: PyGaSe.shared.GameStateUpdate):
+        self.server._state_update_cache.append(state_update)
+        if len(self.server._state_update_cache) > UPDATE_CACHE_SIZE:
+            self.server._state_update_cache = self.server._state_update_cache[1:]
