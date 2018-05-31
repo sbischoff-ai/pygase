@@ -11,13 +11,13 @@ which the *GameService* serves has to be properly forwarded within that network.
 import socket
 import threading
 import time
-import PyGaSe.shared
+import pygase.shared
 
 REQUEST_TIMEOUT = 0.5
 CONNECTION_TIMEOUT = 5.0
 _BUFFER_SIZE = 1024
 
-class ConnectionStatus(PyGaSe.shared.TypeClass):
+class ConnectionStatus(pygase.shared.TypeClass):
     '''
     Enum class with the following values:
     - *Connected*: Connection is running.
@@ -40,7 +40,7 @@ class Connection:
     every *update_cycle_interval* seconds.
     '''
     def __init__(self, server_address, closed=False):
-        self.game_state = PyGaSe.shared.GameState()
+        self.game_state = pygase.shared.GameState()
         self.server_address = server_address
         self._client_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
         self._client_socket.settimeout(REQUEST_TIMEOUT)
@@ -59,16 +59,16 @@ class Connection:
         self.disconnect()
         self._client_socket.close()
 
-    def _send_and_recv(self, package: PyGaSe.shared.UDPPackage):
+    def _send_and_recv(self, package: pygase.shared.UDPPackage):
         # Send package to server ...
         self._client_socket.sendto(package.to_datagram(), self.server_address)
         # ... and get response if possible, otherwise create GameServiceError package
         try:
-            return PyGaSe.shared.UDPPackage.from_datagram(self._client_socket.recv(_BUFFER_SIZE))
+            return pygase.shared.UDPPackage.from_datagram(self._client_socket.recv(_BUFFER_SIZE))
         except socket.timeout:
-            return PyGaSe.shared.timeout_error('Request timed out.')
+            return pygase.shared.timeout_error('Request timed out.')
         except ConnectionResetError:
-            return PyGaSe.shared.timeout_error('Server not found.')
+            return pygase.shared.timeout_error('Server not found.')
 
     def connect(self):
         '''
@@ -103,7 +103,7 @@ class Connection:
         '''
         return self.connection_status == ConnectionStatus.WaitingForServer
 
-    def post_client_activity(self, client_activity: PyGaSe.shared.ClientActivity):
+    def post_client_activity(self, client_activity: pygase.shared.ClientActivity):
         '''
         Sends the *ClientActivity* object to the server.
         '''
@@ -116,7 +116,7 @@ class Connection:
         while time.time()-t_0 < CONNECTION_TIMEOUT and \
           not self.connection_status == ConnectionStatus.Disconnected:
             t_1 = time.time()
-            response = self._send_and_recv(PyGaSe.shared.game_state_request())
+            response = self._send_and_recv(pygase.shared.game_state_request())
             if response.is_response():
                 self.game_state = response.body
                 if not self.connection_status == ConnectionStatus.Disconnected:
@@ -138,13 +138,13 @@ class Connection:
             activities_to_post = self._polled_client_activities[:5] # First 5 activities in queue
             for activity in activities_to_post:
                 response = self._send_and_recv(
-                    PyGaSe.shared.post_activity_request(activity)
+                    pygase.shared.post_activity_request(activity)
                 )
                 if response.is_response():
                     self._polled_client_activities.remove(activity)
             # Then get game state update
             response = self._send_and_recv(
-                PyGaSe.shared.game_state_update_request(self.game_state.time_order)
+                pygase.shared.game_state_update_request(self.game_state.time_order)
             )
             if response.is_response():
                 self.game_state += response.body

@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(
-    name='PyGaSe',
+    name='pygase',
     version='0.1',
     description='A high-performance game server, client and UDP-based network protocol for real-time online gaming.',
     author='Silas Bischoff',
@@ -26,6 +26,6 @@ setup(
         'Intended Audience :: Developers',
         'Development Status :: 3 - Alpha'
     ],
-    packages=['PyGaSe'],
+    packages=['pygase'],
     install_requires=['umsgpack']
 )

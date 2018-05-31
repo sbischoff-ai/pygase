@@ -23,8 +23,7 @@ class TypeClass:
         '''
         Add a new named type to this enum-like class.
         '''
-        counter = len(cls.__dict__)
-        setattr(cls, name, counter)
+        setattr(cls, name, len(cls.__dict__) + 1)
 
 class Sendable:
     '''
@@ -233,6 +232,13 @@ class GameState(Sendable):
     '''
     Overrides of 'object' member functions
     '''
+    # Check time ordering
+    def __lt__(self, other):
+        return self.time_order < other.time_order
+
+    def __gt__(self, other):
+        return self.time_order > other.time_order
+
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             return self.game_status == other.game_status
@@ -262,11 +268,9 @@ class GameStateUpdate(Sendable):
     # Adding to another update should return an updated update
     def __add__(self, other):
         if other > self:
-            self.__dict__.update(other.__dict__)
-            return self
+            return _recursive_update(self.__dict__, other.__dict__)
         else:
-            other.__dict__.update(self.__dict__)
-            return other
+            return _recursive_update(other.__dict__, self.__dict__)
 
     # Adding to a GameState should update and return the state
     def __radd__(self, other):
@@ -275,9 +279,8 @@ class GameStateUpdate(Sendable):
             # sum will always begin by adding the first element of the
             # list to 0.
             return self
-        if self.time_order > other.time_order:
-            other.__dict__.update(self.__dict__)
-        return other
+        if self > other:
+            return _recursive_update(other.__dict__, self.__dict__)
 
     # Check time ordering
     def __lt__(self, other):
@@ -399,3 +402,13 @@ def toggle_pause_activity(shared_game_state: GameState):
         activity_type=activity_type,
         activity_data={}
     )
+
+# This is for GameStateUpdate objects, which should update nested
+# dicts recursively so that no state data is unexpectedly deleted.
+def _recursive_update(d: dict, u: dict):
+    for k, v in u.items():
+        if isinstance(v, dict):
+            d[k] = _recursive_update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
