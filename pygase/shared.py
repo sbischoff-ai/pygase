@@ -215,7 +215,7 @@ class GameState(Sendable):
     *time_order* should be in alignment with the servers current update counter.
     '''
 
-    def __init__(self, time_order=0, game_status=GameStatus().Paused):
+    def __init__(self, time_order=0, game_status=GameStatus.Paused):
         self.game_status = game_status
         self.time_order = time_order
         self.players = {}
@@ -227,7 +227,7 @@ class GameState(Sendable):
         '''
         Returns *True* if game status is *Paused*.
         '''
-        return self.game_status == GameStatus().Paused
+        return self.game_status == GameStatus.Paused
 
     '''
     Overrides of 'object' member functions
