@@ -46,7 +46,7 @@ class Connection:
         self._client_socket.settimeout(REQUEST_TIMEOUT)
         self.latency = 0
         self._polled_client_activities = []
-        self.update_cycle_interval = 0.03
+        self.update_cycle_interval = 0.02
         if not closed:
             self._update_cycle_thread = threading.Thread(target=self._update_cycle)
             self.connection_status = ConnectionStatus.WaitingForServer

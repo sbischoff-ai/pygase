@@ -150,7 +150,7 @@ class GameLoop:
     def __init__(self, server: Server):
         self.server = server
         self._game_loop_thread = threading.Thread()
-        self.update_cycle_interval = 0.03
+        self.update_cycle_interval = 0.02
 
     def start(self):
         '''
@@ -174,18 +174,22 @@ class GameLoop:
         while not self.server.game_state.is_paused():
             t = time.time()
             # Create update object and fill it with all necessary changes
-            update = pygase.shared.GameStateUpdate(self.server.game_state.time_order + 1)
+            update_by_activities = pygase.shared.GameStateUpdate(self.server.game_state.time_order + 1)
             # Handle client activities first
             activities_to_handle = self.server._client_activity_queue[:5]
             # Get first 5 activitys in queue
             for activity in activities_to_handle:
-                self.handle_activity(activity, update, dt)
+                self.handle_activity(activity, update_by_activities, dt)
                 del self.server._client_activity_queue[0]
                 # Should be safe, otherwise use *remove(activity)*
-            self.update_game_state(update, dt)
-            # Add the update to the game state and cache it for the clients
-            self.server.game_state += update
-            self._cache_state_update(update)
+            # Add activity update to state, cache it and then run the server state update
+            self.server.game_state += update_by_activities
+            self._cache_state_update(update_by_activities)
+            update_by_server = pygase.shared.GameStateUpdate(self.server.game_state.time_order + 1)
+            self.update_game_state(update_by_server, dt)
+            # Add the final update to the game state and cache it for the clients
+            self.server.game_state += update_by_server
+            self._cache_state_update(update_by_server)
             dt = time.time() - t
             time.sleep(max(self.update_cycle_interval-dt, 0))
 
