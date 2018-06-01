@@ -70,11 +70,9 @@ GameLoop(self, server:pygase.server.Server)
 ```
 
 Class that can update a shared game state by running a game logic simulation thread.
-It must be passed a *pygase.shared.GameState* and a list of *pygase.shared.ClientActivity*s from the
-*Server* object which owns the *GameLoop*.
 
 You should inherit from this class and implement the *handle_activity()* and
-*update_game_state()* methods.
+*update_game_state()* methods, as well as *on_join()*.
 
 <h3 id="pygase.server.GameLoop.start">start</h3>
 
@@ -101,6 +99,8 @@ GameLoop.on_join(self, player_id:int, update:pygase.shared.GameStateUpdate)
 ```
 
 Override this method to define your initial player data.
+*update.players[player_id]* will already be accessible when *on_join* is called.
+
 
 <h3 id="pygase.server.GameLoop.handle_activity">handle_activity</h3>
 
