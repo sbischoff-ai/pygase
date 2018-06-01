@@ -78,6 +78,8 @@ Enum class with the values:
 - *PauseGame*
 - *ResumeGame*
 
+Can and is supposed to be extended using *TypeClass*'s *add_type* method.
+
 <h2 id="pygase.shared.PackageType">PackageType</h2>
 
 ```python

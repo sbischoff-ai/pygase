@@ -69,6 +69,8 @@ class ActivityType(TypeClass):
     Enum class with the values:
     - *PauseGame*
     - *ResumeGame*
+
+    Can and is supposed to be extended using *TypeClass*'s *add_type* method.
     '''
 
     PauseGame = 1
