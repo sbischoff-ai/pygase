@@ -48,7 +48,7 @@ class Sendable:
             received_sendable = cls()
             received_sendable.__dict__ = umsgpack.unpackb(bytepack)
             return received_sendable
-        except (umsgpack.ExtraData, KeyError):
+        except (umsgpack.InsufficientDataException, KeyError):
             raise TypeError('Bytes could no be parsed into ' + cls.__name__ + '.')
 
 class GameStatus(TypeClass):

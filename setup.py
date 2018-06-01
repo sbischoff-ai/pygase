@@ -28,5 +28,5 @@ setup(
         'Development Status :: 3 - Alpha'
     ],
     packages=['pygase'],
-    install_requires=['umsgpack']
+    install_requires=['u-msgpack-python']
 )
