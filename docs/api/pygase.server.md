@@ -23,8 +23,8 @@ Threading UDP server that manages clients and processes requests.
 and the game state update function. *game_state* is an instance of *pygase.shared.GameState* that
 holds all necessary initial data.
 
-Call *serve_forever*() in a seperate thread for the server to start handling requests from
-*Connection*s. Call *shutdown*() to stop it.
+Call *start()* for the server to start handling requests from
+*Connection*s. Call *shutdown()* to stop it.
 
 *game_loop* is the server's *GameLoop* object, which simulates the game logic and updates
 the *game_state*.
