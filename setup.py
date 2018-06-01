@@ -10,7 +10,6 @@ setup(
     author_email='silas.bischoff@stud.uni-due.de',
     license='MIT',
     url='https://github.com/sbischoff-ai/python-game-service',
-    download_url= 'https://github.com/sbischoff-ai/python-game-service/archive/0.1.1.tar.gz',
     keywords=['server', 'client', 'games', 'gaming', 'real-time', 'network', 'UDP', 'protocol', 'game server', 'game service', 'gameservice'],
     classifiers=[
         'Programming Language :: Python',
