@@ -12,7 +12,6 @@ address your server is bound to to your external IPv4 address!**
 import socketserver
 import threading
 import time
-import math
 import pygase.shared
 
 UPDATE_CACHE_SIZE = 100
