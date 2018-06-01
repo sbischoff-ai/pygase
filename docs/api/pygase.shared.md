@@ -9,7 +9,7 @@ This module contains classes for game objects that are relevant for both client 
 Client as well as server are supposed to define subclasses of classes in this module,
 that extend those types with data and functionality that is client-/server-specific.
 
-Also, this module defines the network protocol which *eConnection*s and *Server*s use
+Also, this module defines the network protocol which *Connection*s and *Server*s use
 to communicate. It contains the *UDPPackage* class, which represents a unit of information
 that client and server can exchange with each other, as well as classes that make up parts
 of a package.
