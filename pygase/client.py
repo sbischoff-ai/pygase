@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 '''
 This module mainly contains the *Connection* class, which represents a connection to a
-running GameService (meaning a game server). Use this to manage your server connections.
+running Server (meaning a game server). Use this to manage your server connections.
 
 **Note: If you want to connect to a server in another local network you must use the proper IPv4
 address of that network, and not the local IP address of the server. Also the port on port on
-which the *GameService* serves has to be properly forwarded within that network.**
+which the *Server* serves has to be properly forwarded within that network.**
 '''
 
 import socket
@@ -31,7 +31,7 @@ class ConnectionStatus(pygase.shared.TypeClass):
 
 class Connection:
     '''
-    Initialization of a *Connection* will open a connection to a BossFight GameService
+    Initialization of a *Connection* will open a connection to a BossFight Server
     with the specified *server_address* as a tuple containing the IP-adress as a string and the
     port as an int. Check the *connection_status* attribute to get the status of the Connection as
     a *ConnectionStatus* attribute.
@@ -62,7 +62,7 @@ class Connection:
     def _send_and_recv(self, package: pygase.shared.UDPPackage):
         # Send package to server ...
         self._client_socket.sendto(package.to_datagram(), self.server_address)
-        # ... and get response if possible, otherwise create GameServiceError package
+        # ... and get response if possible, otherwise create ServerError package
         try:
             return pygase.shared.UDPPackage.from_datagram(self._client_socket.recv(_BUFFER_SIZE))
         except socket.timeout:

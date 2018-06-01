@@ -5,11 +5,11 @@
 
 
 This module mainly contains the *Connection* class, which represents a connection to a
-running GameService (meaning a game server). Use this to manage your server connections.
+running *Server*. Use this to manage your server connections.
 
 **Note: If you want to connect to a server in another local network you must use the proper IPv4
 address of that network, and not the local IP address of the server. Also the port on port on
-which the *GameService* serves has to be properly forwarded within that network.**
+which the *Server* serves has to be properly forwarded within that network.**
 
 <h2 id="pygase.client.ConnectionStatus">ConnectionStatus</h2>
 
@@ -28,7 +28,7 @@ Enum class with the following values:
 Connection(self, server_address, closed=False)
 ```
 
-Initialization of a *Connection* will open a connection to a BossFight GameService
+Initialization of a *Connection* will open a connection to a BossFight Server
 with the specified *server_address* as a tuple containing the IP-adress as a string and the
 port as an int. Check the *connection_status* attribute to get the status of the Connection as
 a *ConnectionStatus* attribute.

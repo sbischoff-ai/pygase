@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 '''
 This module defines the *Server* class, a server that can handle requests from
-a client's *ServerConnection* object and the *GameLoop*, which simulates the game logic.
+a client's *Connections* object and the *GameLoop*, which simulates the game logic.
 
 **Note: The IP address you bind the Server to is a local IP address from the
 192.168.x.x address space. If you want computers outside your local network to be
@@ -24,7 +24,7 @@ class Server(socketserver.ThreadingUDPServer):
     holds all necessary initial data.
 
     Call *serve_forever*() in a seperate thread for the server to start handling requests from
-    *ServerConnection*s. Call *shutdown*() to stop it.
+    *Connections*s. Call *shutdown*() to stop it.
 
     *game_loop* is the server's *GameLoop* object, which simulates the game logic and updates
     the *game_state*.
