@@ -4,13 +4,13 @@ from setuptools import setup
 
 setup(
     name='pygase',
-    version='0.1',
+    version='0.1.0',
     description='A high-performance game server, client and UDP-based network protocol for real-time online gaming.',
     author='Silas Bischoff',
     author_email='silas.bischoff@stud.uni-due.de',
     license='MIT',
     url='https://github.com/sbischoff-ai/python-game-service',
-    download_url= 'https://github.com/sbischoff-ai/python-game-service/archive/0.1.tar.gz',
+    download_url= 'https://github.com/sbischoff-ai/python-game-service/archive/0.1.1.tar.gz',
     keywords=['server', 'client', 'games', 'gaming', 'real-time', 'network', 'UDP', 'protocol', 'game server', 'game service', 'gameservice'],
     classifiers=[
         'Programming Language :: Python',
