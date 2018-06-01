@@ -114,7 +114,7 @@ To be used as part of an *ErrorMessage* object in a *ServerError* package.
 <h2 id="pygase.shared.ErrorMessage">ErrorMessage</h2>
 
 ```python
-ErrorMessage(self, error_type=<function ErrorType.RequestInvalid at 0x000001F38ABFDD90>, message='')
+ErrorMessage(self, error_type=ErrorType.RequestInvalid, message='')
 ```
 
 The sendable type *ErrorMessage* is used for the body of *UDPPackage*s with
@@ -190,7 +190,7 @@ Returns *True* if the package is of package type *PostClientActivityRequest*.
 <h2 id="pygase.shared.GameState">GameState</h2>
 
 ```python
-GameState(self, time_order=0, game_status=<function GameStatus.Paused at 0x000001F38ABFDBF8>)
+GameState(self, time_order=0, game_status=GameStatus.Paused)
 ```
 
 Contains game state information that is required to be known both by the server and the client.
@@ -226,7 +226,7 @@ also heavier update (meaning it will contain more data).
 <h2 id="pygase.shared.ClientActivity">ClientActivity</h2>
 
 ```python
-ClientActivity(self, activity_type=<function ActivityType.PauseGame at 0x000001F38ABFDC80>, activity_data={})
+ClientActivity(self, activity_type=ActivityType.PauseGame, activity_data={})
 ```
 
 An update the client sends to the server about client-side processes like player movement and
