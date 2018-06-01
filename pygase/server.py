@@ -37,7 +37,7 @@ class Server(socketserver.ThreadingUDPServer):
         self._client_activity_queue = []
         self._state_update_cache = []
         self._player_counter = 0
-        self.game_loop = GameLoop(self)
+        self.game_loop = game_loop_class(self)
         self._server_thread = threading.Thread()
 
     def start(self):
@@ -85,7 +85,7 @@ class ServerRequestHandler(socketserver.BaseRequestHandler):
         if request.is_update_request():
             # respond by sending the sum of all updates since the client's time-order point.
             update = sum(
-                (upd for upd in self.server.game_loop._state_update_cache if upd > request.body),
+                (upd for upd in self.server._state_update_cache if upd > request.body),
                 request.body
             )
             response = pygase.shared.response(update)
@@ -109,21 +109,13 @@ class ServerRequestHandler(socketserver.BaseRequestHandler):
             elif request.body.activity_type == pygase.shared.ActivityType.JoinServer:
                 # A player dict is added to the game state. The id is unique for the
                 # server session (counting from 0 upwards).
-                update = pygase.shared.GameStateUpdate(
-                    time_order=self.server.game_state.time_order + 1,
-                    players={
-                        self.server._player_counter: {
-                            'name': request.body.activity_data['name']
-                        }
-                    }
-                )
-                self.server.game_loop.on_join(
-                    player_id=self.server._player_counter,
-                    update=update
-                )
-                self.server._player_counter += 1
-                self.server.game_state += update
-                self.server.game_loop._cache_state_update(update)
+                if self.server.game_state.is_paused():
+                    update = pygase.shared.GameStateUpdate(
+                        self.server.game_state.time_order + 1
+                    )
+                    self.server.game_loop._add_player(request.body, update)
+                else:
+                    self.server._client_activity_queue.append(request.body)
             else:
                 # Any other kind of activity: add to the queue for the game loop
                 self.server._client_activity_queue.append(request.body)
@@ -179,7 +171,10 @@ class GameLoop:
             activities_to_handle = self.server._client_activity_queue[:5]
             # Get first 5 activitys in queue
             for activity in activities_to_handle:
-                self.handle_activity(activity, update_by_activities, dt)
+                if activity.activity_type == pygase.shared.ActivityType.JoinServer:
+                    self._add_player(activity, update_by_activities)
+                else:
+                    self.handle_activity(activity, update_by_activities, dt)
                 del self.server._client_activity_queue[0]
                 # Should be safe, otherwise use *remove(activity)*
             # Add activity update to state, cache it and then run the server state update
@@ -191,7 +186,23 @@ class GameLoop:
             self.server.game_state += update_by_server
             self._cache_state_update(update_by_server)
             dt = time.time() - t
-            time.sleep(max(self.update_cycle_interval-dt, 0))
+            if dt < self.update_cycle_interval:
+                time.sleep(self.update_cycle_interval-dt)
+                dt = self.update_cycle_interval
+
+    def _add_player(self, join_activity, update):
+        update.players = {
+            self.server._player_counter: {
+                'name': join_activity.activity_data['name']
+            }
+        }
+        self.on_join(
+            player_id=self.server._player_counter,
+            update=update
+        )
+        self.server._player_counter += 1
+        self.server.game_state += update
+        self._cache_state_update(update)
 
     def on_join(self, player_id: int, update: pygase.shared.GameStateUpdate):
         '''

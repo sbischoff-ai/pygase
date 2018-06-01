@@ -15,7 +15,9 @@ IF %pypy%==y MKDIR %~dp0pypyvenv
 IF %pypy%==y %path% -m venv %~dp0pypyvenv
 ECHO Appending Development Directory to PYTHONPATH ...
 IF %pypy%==n > %~dp0venv\Lib\site-packages\pygase.pth ECHO %~dp0pygase\
+IF %pypy%==n >> %~dp0venv\Lib\site-packages\pygase.pth ECHO %~dp0chase\
 IF %pypy%==y > %~dp0pypyvenv\site-packages\pygase.pth ECHO %~dp0pygase\
+IF %pypy%==y >> %~dp0pypyvenv\site-packages\pygase.pth ECHO %~dp0chase\
 ECHO ##################################
 ECHO Installing Dependencies ...
 ECHO ##################################

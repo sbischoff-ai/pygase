@@ -268,9 +268,11 @@ class GameStateUpdate(Sendable):
     # Adding to another update should return an updated update
     def __add__(self, other):
         if other > self:
-            return _recursive_update(self.__dict__, other.__dict__)
+            _recursive_update(self.__dict__, other.__dict__)
+            return self
         else:
-            return _recursive_update(other.__dict__, self.__dict__)
+            _recursive_update(other.__dict__, self.__dict__)
+            return other
 
     # Adding to a GameState should update and return the state
     def __radd__(self, other):
@@ -280,7 +282,8 @@ class GameStateUpdate(Sendable):
             # list to 0.
             return self
         if self > other:
-            return _recursive_update(other.__dict__, self.__dict__)
+            _recursive_update(other.__dict__, self.__dict__)
+        return other
 
     # Check time ordering
     def __lt__(self, other):

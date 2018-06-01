@@ -13,7 +13,7 @@ GitHub page.
 ### Shared
 
 ```Python
-# my_games_shared_stuff.py
+# shared_stuff.py
 
 import pygase.shared
 
@@ -26,7 +26,7 @@ pygase.shared.ActivityType.add_type('MovePlayer')
 ```Python
 import sys
 import pygase.shared, pygase.server
-import my_games_shared_stuff
+import chase.shared_stuff
 
 # Create your server-side game state object with initial data.
 SHARED_GAME_STATE = pygase.shared.GameState()
@@ -35,7 +35,7 @@ SHARED_GAME_STATE.protection = False
 SHARED_GAME_STATE.countdown = 0.0
 
 # Implement your own server-side game loop.
-class MyGameLoop(pygase.server.GameLoop):
+class ChaseGameLoop(pygase.server.GameLoop):
 
     # Override the on_join method to define your initial player data.
     def on_join(self, player_id, update):
@@ -48,16 +48,21 @@ class MyGameLoop(pygase.server.GameLoop):
 
     # Override the handle_activity method to handle your custom client
     # activities within the server-side game loop.
-    def handle_activity(self, activity, update):
+    def handle_activity(self, activity, update, dt):
         if activity.activity_type == pygase.shared.ActivityType.MovePlayer:
             player_id = activity.activity_data['player_id']
             new_position = activity.activity_data['new_position']
             # The update object works the same way as in on_join.
-            update.players[player_id]['position'] = new_position
+            update.players = {
+                player_id: {'position': new_position}
+            }
     
     # Override the update_game_state method to implement your own
     # game logic.
     def update_game_state(self, update, dt):
+        # Before a player joins, updating the game state is unnecessary.
+        if self.server.game_state.chaser is None:
+            return
         # If protection mode is on, all players are safe from the chaser.
         if self.server.game_state.protection:
             update.countdown = self.server.game_state.countdown - dt
@@ -75,7 +80,7 @@ class MyGameLoop(pygase.server.GameLoop):
                 distance_squared = dx*dx + dy*dy
                 # When the chaser touches another player, that player becomes
                 # chaser and the protection countdown starts.
-                if distance_squared < 10:
+                if distance_squared < 15:
                     update.chaser = player_id
                     update.protection = True
                     update.countdown = 5.0
@@ -86,7 +91,7 @@ class MyGameLoop(pygase.server.GameLoop):
 SERVER = pygase.server.Server(
     ip_address='127.0.0.1',
     port=8080,
-    game_loop_class=MyGameLoop,
+    game_loop_class=ChaseGameLoop,
     game_state=SHARED_GAME_STATE
 )
 
@@ -101,10 +106,9 @@ SERVER.shutdown()
 ### Client
 
 ```Python
-import pygame
-from pygame.locals import *
+import pygame, pygame.locals
 import pygase.shared, pygase.client
-import my_games_shared_stuff
+import chase.shared_stuff
 
 # Establish a connection with the running server.
 # For online gaming you have to use another IP of course.
@@ -116,8 +120,8 @@ CONNECTION.post_client_activity(
 )
 # Get the player's ID.
 PLAYER_ID = None
-while not PLAYER_ID:
-    for player_id, player in CONNECTION.game_state.players.items():
+while PLAYER_ID is None:
+    for player_id, player in CONNECTION.game_state.players.copy().items():
         if player['name'] == PLAYER_NAME:
             PLAYER_ID = player_id
 
@@ -134,8 +138,9 @@ SCREEN = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 def draw_player(position, is_chaser, is_self):
     if is_self:
         color = (50, 255, 50)
-    color = (255, 50, 50) if is_chaser else (50, 50, 255)
-    pygame.draw.circle(SCREEN, color, position, 5)
+    else:
+        color = (255, 50, 50) if is_chaser else (50, 50, 255)
+    pygame.draw.circle(SCREEN, color, position, 10)
 
 # Keep track of pressed keys.
 KEYS_PRESSED = set()
@@ -146,32 +151,32 @@ CLOCK = pygame.time.Clock()
 # The client's game loop
 SHUTDOWN = False
 while not SHUTDOWN:
-    dt = CLOCK.tick(60)
+    dt = CLOCK.tick(40)
     # Clear the screen and draw all players
     SCREEN.fill((0, 0, 0))
-    for player_id, player in CONNECTION.game_state.players.items():
+    for player_id, player in CONNECTION.game_state.players.copy().items():
         is_chaser = player_id == CONNECTION.game_state.chaser
         is_self = player_id == PLAYER_ID
         draw_player(player['position'], is_chaser, is_self)
     # Handle events
     for event in pygame.event.get():
-        if event.type == QUIT:
+        if event.type == pygame.locals.QUIT:
             SHUTDOWN = True
             break
-        if event.type == KEYDOWN:
+        if event.type == pygame.locals.KEYDOWN:
             KEYS_PRESSED.add(event.key)
-        if event.type == KEYUP:
+        if event.type == pygame.locals.KEYUP:
             KEYS_PRESSED.remove(event.key)
     # Handle player movement
     dx, dy = 0, 0
-    if K_UP in KEYS_PRESSED:
-        dy += 50/dt
-    elif K_DOWN in KEYS_PRESSED:
-        dy -= 50/dt
-    elif K_RIGHT in KEYS_PRESSED:
-        dx += 50/dt
-    elif K_LEFT in KEYS_PRESSED:
-        dx -= 50/dt
+    if pygame.locals.K_DOWN in KEYS_PRESSED:
+        dy += int(0.1*dt)
+    elif pygame.locals.K_UP in KEYS_PRESSED:
+        dy -= int(0.1*dt)
+    elif pygame.locals.K_RIGHT in KEYS_PRESSED:
+        dx += int(0.1*dt)
+    elif pygame.locals.K_LEFT in KEYS_PRESSED:
+        dx -= int(0.1*dt)
     # Create a client activity for the player's movement
     old_position = CONNECTION.game_state.players[PLAYER_ID]['position']
     move_activity = pygase.shared.ClientActivity(
@@ -184,8 +189,14 @@ while not SHUTDOWN:
             )
         }
     )
+    # Send the activity to the server.
+    CONNECTION.post_client_activity(move_activity)
     # Do the thing.
-    pygame.display.update()
+    pygame.display.flip()
+
+pygame.quit()
+# You need to disconnect from the server.
+CONNECTION.disconnect()
 ```
 
 Have Fun.
