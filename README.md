@@ -5,10 +5,11 @@ A Python package that contains a versatile high-performance UDP-based game serve
 
 ## Usage Example
 
-This example implements an online game of chase, in which players can move around,
-while one of them is the chaser who has to catch another player, thereby passing
-the role of chaser to that player. For a complete API documentation check out the
-GitHub page.
+This example game implements an online game of chase, in which players can move around,
+while one of them is the chaser who has to catch another player. A player who has been
+catched becomes the next chaser and can catch other players after a 5s protection countdown.
+
+For a complete API documentation look in `.\docs\api\`.
 
 ### Shared
 

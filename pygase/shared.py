@@ -18,6 +18,10 @@ import sys
 _HEADER_END_TOKEN = bytes.fromhex('b5968459')
 
 class TypeClass:
+    '''
+    Mixin that allows to add class variables to a class during runtime.
+    It is used to make enum classes like AktivityType or PackageType extensible.
+    '''
     @classmethod
     def add_type(cls, name: str):
         '''
