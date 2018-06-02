@@ -12,7 +12,7 @@ of a package.
 '''
 
 import sys
-import uuid
+import random
 import umsgpack
 
 # Unique 4-byte token to mark the end of the header of a UDPPackage
@@ -336,11 +336,12 @@ def join_server_activity(player_name: str):
     to uniquely identify the joined player in the shared game state. This means player
     names need not be unique.
     '''
+    join_id = bytes.fromhex(''.join(random.choices('0123456789abcdef', k=8)))
     return ClientActivity(
         activity_type=ActivityType.JoinServer,
         activity_data={
             'name': player_name,
-            'join_id': uuid.uuid4()
+            'join_id': join_id
         }
     )
 
