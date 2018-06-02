@@ -20,8 +20,8 @@ class Server(socketserver.ThreadingUDPServer):
     '''
     Threading UDP server that manages clients and processes requests.
     *game_loop_class* is your subclass of *GameLoop*, which implements the handling of activities
-    and the game state update function. *game_state* is an instance of *pygase.shared.GameState* that
-    holds all necessary initial data.
+    and the game state update function. *game_state* is an instance of *pygase.shared.GameState*
+    that holds all necessary initial data.
 
     Call *start()* for the server to start handling requests from
     *Connections*s. Call *shutdown()* to stop it.
@@ -35,7 +35,7 @@ class Server(socketserver.ThreadingUDPServer):
         self.game_state = game_state
         self._client_activity_queue = []
         self._state_update_cache = []
-        self._player_counter = 0
+        self._join_counter = 0
         self.game_loop = game_loop_class(self)
         self._server_thread = threading.Thread()
 
@@ -75,14 +75,19 @@ class ServerRequestHandler(socketserver.BaseRequestHandler):
         try:
             request = pygase.shared.UDPPackage.from_datagram(self.request[0])
         except TypeError:
-            # if unpacking request failed send back error message and exit handle function
+            # If unpacking request failed send back error message and exit handle function
             response = pygase.shared.unpack_error('Server responded: Byte error.')
             self.request[1].sendto(response.to_datagram(), self.client_address)
             return
 
         # Handle request and assign response here
         if request.is_update_request():
-            # respond by sending the sum of all updates since the client's time-order point.
+            if request.body < min(self.server._state_update_cache):
+                # If the client's time_order is too old, respond with error so the client resyncs.
+                response = pygase.shared.out_of_sync_error('Server responded: Lag error.')
+                self.request[1].sendto(response.to_datagram(), self.client_address)
+                return
+            # Respond by sending the sum of all updates since the client's time-order point.
             update = sum(
                 (upd for upd in self.server._state_update_cache if upd > request.body),
                 request.body
@@ -105,16 +110,25 @@ class ServerRequestHandler(socketserver.BaseRequestHandler):
                     game_status=pygase.shared.GameStatus.Active
                 ))
                 self.server.game_loop.start()
-            elif request.body.activity_type == pygase.shared.ActivityType.JoinServer:
+            elif request.body.activity_type == pygase.shared.ActivityType.JoinServer \
+              and self.server.game_state.is_paused():
                 # A player dict is added to the game state. The id is unique for the
                 # server session (counting from 0 upwards).
-                if self.server.game_state.is_paused():
-                    update = pygase.shared.GameStateUpdate(
-                        self.server.game_state.time_order + 1
-                    )
-                    self.server.game_loop._add_player(request.body, update)
-                else:
-                    self.server._client_activity_queue.append(request.body)
+                update = pygase.shared.GameStateUpdate(
+                    self.server.game_state.time_order + 1
+                )
+                self.server.game_loop._add_player(request.body, update)
+                self.server.game_state += update
+                self.server.game_loop._cache_state_update(update)
+            elif request.body.activity_type == pygase.shared.ActivityType.LeaveServer \
+              and self.server.game_state.is_paused():
+                update = pygase.shared.GameStateUpdate(
+                    self.server.game_state.time_order + 1
+                )
+                player_id = request.body.activity_data['player_id']
+                update.players[player_id] = pygase.shared.TO_DELETE
+                self.server.game_state += update
+                self.server.game_loop._cache_state_update(update)
             else:
                 # Any other kind of activity: add to the queue for the game loop
                 self.server._client_activity_queue.append(request.body)
@@ -138,6 +152,7 @@ class GameLoop:
     '''
     def __init__(self, server: Server):
         self.server = server
+        self.game_time = 0.0
         self._game_loop_thread = threading.Thread()
         self.update_cycle_interval = 0.02
 
@@ -163,20 +178,22 @@ class GameLoop:
         while not self.server.game_state.is_paused():
             t = time.time()
             # Create update object and fill it with all necessary changes
-            update_by_activities = pygase.shared.GameStateUpdate(self.server.game_state.time_order + 1)
+            update_by_clients = pygase.shared.GameStateUpdate(self.server.game_state.time_order + 1)
             # Handle client activities first
             activities_to_handle = self.server._client_activity_queue[:5]
             # Get first 5 activitys in queue
             for activity in activities_to_handle:
                 if activity.activity_type == pygase.shared.ActivityType.JoinServer:
-                    self._add_player(activity, update_by_activities)
+                    self._add_player(activity, update_by_clients)
+                elif activity.activity_type == pygase.shared.ActivityType.LeaveServer:
+                    player_id = activity.activity_data['player_id']
+                    update_by_clients.players[player_id] = pygase.shared.TO_DELETE
                 else:
-                    self.handle_activity(activity, update_by_activities, dt)
-                del self.server._client_activity_queue[0]
-                # Should be safe, otherwise use *remove(activity)*
+                    self.handle_activity(activity, update_by_clients, dt)
+                self.server._client_activity_queue.remove(activity)
             # Add activity update to state, cache it and then run the server state update
-            self.server.game_state += update_by_activities
-            self._cache_state_update(update_by_activities)
+            self.server.game_state += update_by_clients
+            self._cache_state_update(update_by_clients)
             update_by_server = pygase.shared.GameStateUpdate(self.server.game_state.time_order + 1)
             self.update_game_state(update_by_server, dt)
             # Add the final update to the game state and cache it for the clients
@@ -186,20 +203,20 @@ class GameLoop:
             if dt < self.update_cycle_interval:
                 time.sleep(self.update_cycle_interval-dt)
                 dt = self.update_cycle_interval
+            self.game_time += dt
 
     def _add_player(self, join_activity, update):
         update.players = {
-            self.server._player_counter: {
-                'name': join_activity.activity_data['name']
+            self.server._join_counter: {
+                'name': join_activity.activity_data['name'],
+                'join_id': join_activity.activity_data['join_id']
             }
         }
         self.on_join(
-            player_id=self.server._player_counter,
+            player_id=self.server._join_counter,
             update=update
         )
-        self.server._player_counter += 1
-        self.server.game_state += update
-        self._cache_state_update(update)
+        self.server._join_counter += 1
 
     def on_join(self, player_id: int, update: pygase.shared.GameStateUpdate):
         '''

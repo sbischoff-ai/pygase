@@ -11,11 +11,14 @@ that client and server can exchange with each other, as well as classes that mak
 of a package.
 '''
 
-import umsgpack
 import sys
+import uuid
+import umsgpack
 
 # Unique 4-byte token to mark the end of the header of a UDPPackage
 _HEADER_END_TOKEN = bytes.fromhex('b5968459')
+# Unique 4-byte token to mark
+TO_DELETE = bytes.fromhex('d281e5ba')
 
 class TypeClass:
     '''
@@ -76,6 +79,7 @@ class ActivityType(TypeClass):
     PauseGame = 1
     ResumeGame = 2
     JoinServer = 3
+    LeaveServer = 4
 
 class PackageType(TypeClass):
     '''
@@ -111,6 +115,7 @@ class ErrorType(TypeClass):
     RequestTimeout = 1
     UnpackError = 2
     RequestInvalid = 3
+    OutOfSync = 4
 
 class ErrorMessage(Sendable):
     '''
@@ -235,6 +240,16 @@ class GameState(Sendable):
         '''
         return self.game_status == GameStatus.Paused
 
+    def iter(self, dict_attr: str):
+        '''
+        Returns a representation of the *GameState* attribute *dict_attr* that is safe to
+        iterate through, while the GameState is concurrently updated. Returns keys and
+        values in a tuple.
+
+        Example: Iterate through players with `for player_id, player in game_state.iter('players')`.
+        '''
+        return getattr(self, dict_attr).copy().items()
+
     '''
     Overrides of 'object' member functions
     '''
@@ -256,9 +271,11 @@ class GameState(Sendable):
 class GameStateUpdate(Sendable):
     '''
     Represents a set of changes to carry out on a *GameState*.
-    The server should keep an update counter and label all updated with ascending index.
+    The server keep a *time_order* counter and labels all updates in ascending order.
 
-    Keywords are *GameState* atttribute names.
+    Keywords are *GameState* atttribute names. If you want to remove some key from the
+    game state (*GameState* attributes themselves can not be deleted), just assign
+    *TO_DELETE* to it in the update.
 
     Use the *+* operator to add *GameStateUpdate*s together or to add them to a
     *GameState* (returning the updated update/state).
@@ -314,10 +331,26 @@ class ClientActivity(Sendable):
 def join_server_activity(player_name: str):
     '''
     Returns a *ClientActivity* that joins a player with name *player_name* to the game.
+
+    The field *join_id* in the *activity_data* attribute of the activity can be used
+    to uniquely identify the joined player in the shared game state. This means player
+    names need not be unique.
     '''
     return ClientActivity(
         activity_type=ActivityType.JoinServer,
-        activity_data={'name': player_name}
+        activity_data={
+            'name': player_name,
+            'join_id': uuid.uuid4()
+        }
+    )
+
+def leave_server_activity(player_id):
+    '''
+    Returns a *ClientActivity* that removes the player with the ID *player_id* from the game.
+    '''
+    return ClientActivity(
+        activity_type=ActivityType.LeaveServer,
+        activity_data={'player_id': player_id}
     )
 
 def timeout_error(message=''):
@@ -355,6 +388,19 @@ def request_invalid_error(message=''):
         package_type=PackageType.ServerError,
         body=ErrorMessage(
             error_type=ErrorType.RequestInvalid,
+            message=message
+        )
+    )
+
+def out_of_sync_error(message=''):
+    '''
+    Returns a *UDPPackage* with package type *ServerError*,
+    error type *OutOfSync* and *message* as error message.
+    '''
+    return UDPPackage(
+        package_type=PackageType.ServerError,
+        body=ErrorMessage(
+            error_type=ErrorType.OutOfSync,
             message=message
         )
     )
@@ -414,9 +460,12 @@ def toggle_pause_activity(shared_game_state: GameState):
 
 # This is for GameStateUpdate objects, which should update nested
 # dicts recursively so that no state data is unexpectedly deleted.
+# Also, this functions manages deletion of state objects.
 def _recursive_update(d: dict, u: dict):
     for k, v in u.items():
-        if isinstance(v, dict):
+        if v == TO_DELETE:
+            del d[k]
+        elif isinstance(v, dict):
             d[k] = _recursive_update(d.get(k, {}), v)
         else:
             d[k] = v
