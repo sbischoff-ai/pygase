@@ -122,11 +122,10 @@ class ServerRequestHandler(socketserver.BaseRequestHandler):
                 self.server.game_loop._cache_state_update(update)
             elif request.body.activity_type == pygase.shared.ActivityType.LeaveServer \
               and self.server.game_state.is_paused():
-                update = pygase.shared.GameStateUpdate(
-                    self.server.game_state.time_order + 1
-                )
-                player_id = request.body.activity_data['player_id']
-                update.players[player_id] = pygase.shared.TO_DELETE
+                update = pygase.shared.GameStateUpdate(self.server.game_state.time_order + 1)
+                update.players = {
+                    request.body.activity_data['player_id']: pygase.shared.TO_DELETE
+                }
                 self.server.game_state += update
                 self.server.game_loop._cache_state_update(update)
             else:
@@ -187,7 +186,10 @@ class GameLoop:
                     self._add_player(activity, update_by_clients)
                 elif activity.activity_type == pygase.shared.ActivityType.LeaveServer:
                     player_id = activity.activity_data['player_id']
-                    update_by_clients.players[player_id] = pygase.shared.TO_DELETE
+                    if hasattr(update_by_clients, 'players'):
+                        update_by_clients.players[player_id] = pygase.shared.TO_DELETE
+                    else:
+                        update_by_clients.players = {player_id: pygase.shared.TO_DELETE}
                 else:
                     self.handle_activity(activity, update_by_clients, dt)
                 self.server._client_activity_queue.remove(activity)
@@ -206,12 +208,14 @@ class GameLoop:
             self.game_time += dt
 
     def _add_player(self, join_activity, update):
-        update.players = {
-            self.server._join_counter: {
-                'name': join_activity.activity_data['name'],
-                'join_id': join_activity.activity_data['join_id']
-            }
+        player = {
+            'name': join_activity.activity_data['name'],
+            'join_id': join_activity.activity_data['join_id']
         }
+        if hasattr(update, 'players'):
+            update.players[self.server._join_counter] = player
+        else:
+            update.players = {self.server._join_counter: player}
         self.on_join(
             player_id=self.server._join_counter,
             update=update
