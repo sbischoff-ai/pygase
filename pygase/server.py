@@ -34,7 +34,7 @@ class Server(socketserver.ThreadingUDPServer):
         super().__init__((ip_address, port), ServerRequestHandler)
         self.game_state = game_state
         self._client_activity_queue = []
-        self._state_update_cache = []
+        self._state_update_cache = [pygase.shared.GameStateUpdate()]
         self._join_counter = 0
         self.game_loop = game_loop_class(self)
         self._server_thread = threading.Thread()

@@ -305,7 +305,7 @@ class GameStateUpdate(Sendable):
             # list to 0.
             return self
         if self > other:
-            _recursive_update(other.__dict__, self.__dict__)
+            _recursive_update(other.__dict__, self.__dict__, delete=True)
         return other
 
     # Check time ordering
@@ -336,7 +336,7 @@ def join_server_activity(player_name: str):
     to uniquely identify the joined player in the shared game state. This means player
     names need not be unique.
     '''
-    join_id = bytes.fromhex(''.join(random.choices('0123456789abcdef', k=8)))
+    join_id = ''.join(random.choices('0123456789abcdef', k=8))
     return ClientActivity(
         activity_type=ActivityType.JoinServer,
         activity_data={
@@ -462,9 +462,9 @@ def toggle_pause_activity(shared_game_state: GameState):
 # This is for GameStateUpdate objects, which should update nested
 # dicts recursively so that no state data is unexpectedly deleted.
 # Also, this functions manages deletion of state objects.
-def _recursive_update(d: dict, u: dict):
+def _recursive_update(d: dict, u: dict, delete=False):
     for k, v in u.items():
-        if v == TO_DELETE:
+        if v == TO_DELETE and delete:
             del d[k]
         elif isinstance(v, dict):
             d[k] = _recursive_update(d.get(k, {}), v)
