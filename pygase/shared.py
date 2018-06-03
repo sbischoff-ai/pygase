@@ -274,8 +274,8 @@ class GameStateUpdate(Sendable):
     The server keep a *time_order* counter and labels all updates in ascending order.
 
     Keywords are *GameState* atttribute names. If you want to remove some key from the
-    game state (*GameState* attributes themselves can not be deleted), just assign
-    *TO_DELETE* to it in the update.
+    game state (*GameState* attributes themselves can also be deleted, which removes them from
+    the object altogether), just assign *TO_DELETE* to it in the update.
 
     Use the *+* operator to add *GameStateUpdate*s together or to add them to a
     *GameState* (returning the updated update/state).
@@ -336,7 +336,8 @@ def join_server_activity(player_name: str):
     to uniquely identify the joined player in the shared game state. This means player
     names need not be unique.
     '''
-    join_id = ''.join(random.choices('0123456789abcdef', k=8))
+    # 4-byte random id for unique identification of players
+    join_id = bytes.fromhex(''.join(random.choices('0123456789abcdef', k=8)))
     return ClientActivity(
         activity_type=ActivityType.JoinServer,
         activity_data={
@@ -464,10 +465,9 @@ def toggle_pause_activity(shared_game_state: GameState):
 # Also, this functions manages deletion of state objects.
 def _recursive_update(d: dict, u: dict, delete=False):
     for k, v in u.items():
-        if v == TO_DELETE and delete:
+        if v == TO_DELETE and delete and k in d.keys():
             del d[k]
-        elif isinstance(v, dict):
-            d[k] = _recursive_update(d.get(k, {}), v)
+        elif isinstance(v, dict) and k in d.keys() and isinstance(d[k], dict):
+            _recursive_update(d[k], v, delete=delete)
         else:
             d[k] = v
-    return d

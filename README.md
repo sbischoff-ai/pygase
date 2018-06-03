@@ -1,7 +1,8 @@
 # PyGaSe
 **Py**thon**Ga**me**Se**rver
 
-A Python package that contains a versatile high-performance UDP-based game server, client and network protocol with a simple API.
+A Python package that contains a versatile lightweight UDP-based client-server API and network protocol for 
+real-time online games.
 
 ## Usage Example
 
@@ -9,7 +10,7 @@ This example game implements an online game of chase, in which players can move 
 while one of them is the chaser who has to catch another player. A player who has been
 catched becomes the next chaser and can catch other players after a 5s protection countdown.
 
-For a complete API documentation look in `.\docs\api\`.
+For a complete API documentation look in `.\docs\api\` (see GitHub if you're on PyPI.org).
 
 ### Shared
 
@@ -196,6 +197,10 @@ while not SHUTDOWN:
     pygame.display.flip()
 
 pygame.quit()
+# Leave the server
+CONNECTION.post_client_activity(
+    pygase.shared.leave_server_activity(PLAYER_ID)
+)
 # You need to disconnect from the server.
 CONNECTION.disconnect()
 ```

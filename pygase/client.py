@@ -85,7 +85,12 @@ class Connection:
         Will do nothing if *connection_status* == *ConnectionStatus.Disconnected*.
         '''
         t_0 = time.time()
-        # Force update cycle to end
+        # Try to post all polled activities before disconnect.
+        while self._polled_client_activities:
+            if time.time() - t_0 > self.latency/500:
+                break
+        t_0 = time.time()
+        # Force update cycle to end.
         while self._update_cycle_thread.is_alive() and time.time()-t_0 < REQUEST_TIMEOUT:
             self.connection_status = ConnectionStatus.Disconnected
         if self._update_cycle_thread.is_alive():
