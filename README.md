@@ -160,6 +160,12 @@ while not SHUTDOWN:
         is_chaser = player_id == CONNECTION.game_state.chaser
         is_self = player_id == PLAYER_ID
         draw_player(player['position'], is_chaser, is_self)
+        # This will not produce smooth movement, especially not when the
+        # connection is imperfect. If you want smoother movement, let the
+        # client keep track of player positions seperately and each frame
+        # update the client-side positions using a velocity that is
+        # proportional to the distance between the servers and clients
+        # version of that players position.
     # Handle events
     for event in pygame.event.get():
         if event.type == pygame.locals.QUIT:
