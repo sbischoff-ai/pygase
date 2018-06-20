@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name='pygase',
-    version='0.1.8',
+    version='0.1.9',
     description='A lightweight client-server technology and UDP-based network protocol for real-time online gaming.',
     long_description_content_type='text/markdown',
     long_description = open('README.md').read(),

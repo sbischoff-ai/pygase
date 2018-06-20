@@ -212,6 +212,10 @@ class GameLoop:
             'name': join_activity.activity_data['name'],
             'join_id': join_activity.activity_data['join_id']
         }
+        # If player has already joined, ignore
+        for joined_player in self.server.game_state.players.values():
+            if joined_player['join_id'] == player['join_id']:
+                return
         if hasattr(update, 'players'):
             update.players[self.server._join_counter] = player
         else:
