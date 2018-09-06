@@ -4,6 +4,8 @@
 A Python package that contains a versatile lightweight UDP-based client-server API and network protocol for 
 real-time online games.
 
+Installation: `pip install pygase`
+
 ## Usage Example
 
 This example game implements an online game of chase, in which players can move around,
