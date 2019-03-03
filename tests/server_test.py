@@ -6,7 +6,7 @@ import pygase.shared
 
 class TestServer:
 
-    server_address = ('localhost', 9998)
+    server_address = ('localhost', 1234)
     mock_client_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
     mock_client_socket.settimeout(1.0)
 
