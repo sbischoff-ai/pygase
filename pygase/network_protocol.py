@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pygase.mixins import Sendable, NamedEnum
+from pygase.utils import Sendable, NamedEnum
 
 # unique 4-byte identifier for the PyGaSe package protocol
 _PROTOCOL_ID = bytes.fromhex('ffd0fab9')

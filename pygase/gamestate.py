@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pygase.mixins import Sendable, NamedEnum
+from pygase.utils import Sendable, NamedEnum
 
 # Unique 4-byte token to mark GameState entries for deletion
 TO_DELETE = bytes.fromhex('d281e5ba')

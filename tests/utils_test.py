@@ -1,5 +1,5 @@
 import pytest
-from pygase.sqn import sqn
+from pygase.utils import sqn
 
 class TestSqn:
 
@@ -91,3 +91,10 @@ class TestSqn:
             assert b.__class__ == bytes
             assert sqn.from_bytes(b) == sqn(i)
 
+    def test_subclassing_and_bytesize_change(self):
+        class subsqn(sqn):
+            pass
+        subsqn.set_bytesize(4)
+        assert subsqn._bytesize == 2*sqn._bytesize
+        assert (subsqn._max_sequence+1)/(sqn._max_sequence+1) == sqn._max_sequence + 1
+        assert len(subsqn(12532).to_bytes()) == 4
