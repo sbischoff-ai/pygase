@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+'''
 import socket
 import pygase.server
 import pygase.shared
@@ -53,3 +54,4 @@ class TestServer:
         response = pygase.shared.UDPPackage.from_datagram(self.mock_client_recv())
         assert response.header.package_type == pygase.shared.PackageType.ServerError
         server.server_close()
+'''

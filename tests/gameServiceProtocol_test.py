@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+'''
 import pytest
 import pygase.shared
 
@@ -37,3 +38,4 @@ class TestUDPPackage:
         datagram = other_package.to_datagram()
         received_package = pygase.shared.UDPPackage.from_datagram(datagram)
         assert received_package.body.game_status == pygase.shared.GameStatus.Paused
+'''

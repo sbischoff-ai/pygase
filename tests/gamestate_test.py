@@ -1,37 +1,37 @@
 # -*- coding: utf-8 -*-
 
 import pytest
-import pygase.shared
+from pygase.gamestate import GameState, GameStateUpdate, GameStatus, TO_DELETE
 
 class TestGameState:
 
     def test_game_state_instantiation(self):
-        game_state = pygase.shared.GameState()
+        game_state = GameState()
         assert game_state.time_order == 0
-        assert game_state.game_status == pygase.shared.GameStatus.Paused
-        paused_game_state = pygase.shared.GameState(game_status=pygase.shared.GameStatus.Active)
+        assert game_state.game_status == GameStatus.get('Paused')
+        paused_game_state = GameState(game_status=GameStatus.get('Active'))
         assert game_state.game_status != paused_game_state.game_status
-        paused_game_state.game_status = pygase.shared.GameStatus.Paused
+        paused_game_state.game_status = GameStatus.get('Paused')
         assert game_state == paused_game_state
 
     def test_game_state_bytepacking(self):
-        game_state = pygase.shared.GameState()
+        game_state = GameState()
         game_state.test_pos = 2.5
         bytepack = game_state.to_bytes()
-        unpacked_game_state = pygase.shared.GameState.from_bytes(bytepack)
+        unpacked_game_state = GameState.from_bytes(bytepack)
         assert game_state == unpacked_game_state
         with pytest.raises(TypeError) as exception:
-            pygase.shared.GameState.from_bytes(
-                'This is not a pygase.shared.GameState'.encode('utf-8')
+            GameState.from_bytes(
+                'This is not a GameState'.encode('utf-8')
             )
-            assert str(exception.value) == 'Bytes could no be parsed into GameState.'
+        assert str(exception.value) == 'Bytes could no be parsed into GameState.'
 
     def test_update_arithmetic(self):
-        game_state = pygase.shared.GameState(
+        game_state = GameState(
             time_order=0,
-            game_status=pygase.shared.GameStatus.Paused
+            game_status=GameStatus.get('Paused')
         )
-        update = pygase.shared.GameStateUpdate(
+        update = GameStateUpdate(
             time_order=0,
             test=0
         )
@@ -41,7 +41,7 @@ class TestGameState:
         game_state += update
         assert game_state.test == 0 and game_state.time_order == 1
         update.time_order = 2
-        update.test = pygase.shared.TO_DELETE
+        update.test = TO_DELETE
         game_state += update
         assert not hasattr(game_state, 'test') and game_state.time_order == 2
         update.time_order = 1
@@ -49,23 +49,23 @@ class TestGameState:
         game_state += update
         assert not hasattr(game_state, 'test') and game_state.time_order == 2
         game_state.test = 0
-        update += pygase.shared.GameStateUpdate(
+        update += GameStateUpdate(
             time_order=3,
-            test=pygase.shared.TO_DELETE
+            test=TO_DELETE
         )
-        assert update.time_order == 3 and update.test == pygase.shared.TO_DELETE
+        assert update.time_order == 3 and update.test == TO_DELETE
         assert hasattr(game_state, 'test') and game_state.time_order == 2
         game_state += update
         assert not hasattr(game_state, 'test') and game_state.time_order == 3
-        update += pygase.shared.GameStateUpdate(
+        update += GameStateUpdate(
             time_order=4,
             test='test'
         )
         assert update.test == 'test' and update > game_state
-        game_state += pygase.shared.GameStateUpdate(
+        game_state += GameStateUpdate(
             time_order=3,
-            test={1: pygase.shared.TO_DELETE}
-        ) + pygase.shared.GameStateUpdate(
+            test={1: TO_DELETE}
+        ) + GameStateUpdate(
             time_order=5,
             test={1: 'test1', 2: 'test2'}
         ) + update
