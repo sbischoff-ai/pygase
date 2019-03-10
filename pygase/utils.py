@@ -33,11 +33,16 @@ class NamedEnum:
     _values = []
 
     @classmethod
-    def get(cls, name: str):
-        return cls._values.index(name)
-
+    def get(cls, name_or_value):
+        if isinstance(name_or_value, int):
+            return cls._values[name_or_value]
+        elif isinstance(name_or_value, str):
+            return cls._values.index(name_or_value)
+        else:
+            raise TypeError
+        
     @classmethod
-    def register(cls, name:str):
+    def register(cls, name: str):
         if name not in cls._values:
             cls._values.append(name)
 

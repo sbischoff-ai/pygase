@@ -1,42 +1,50 @@
 # -*- coding: utf-8 -*-
 
 import curio
-from curio import socket, time
+from curio import socket
 
-from pygase.network_protocol import Package, Connection, ProtocolIDMismatchError, BUFFER_SIZE
+from pygase.network_protocol import Package, Connection, ProtocolIDMismatchError
 
 class Server:
     
     def __init__(self):
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.connections = {}
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def run(self, hostname='localhost', port=0):
         self._socket.bind((hostname, port))
-        curio.run(self._serve)
+        curio.run(self._server_task)
     
-    async def _serve(self):
-        while True:
-            async with self._socket:
-                data, client_address = await self._socket.recvfrom(BUFFER_SIZE)
-                try:
-                    package = Package.from_datagram(data)                
-                    if not client_address in self.connections:
-                        self.connections[client_address] = Connection(client_address)
-                        self.connections[client_address].set_status('Good')
-                    connection = self.connections[client_address]
-                    connection.update(package)
-                    connection.local_sequence += 1
-                    response = Package(connection.local_sequence, connection.remote_sequence, connection.ack_bitfield)
-                    await self._socket.sendto(response.to_datagram(), client_address)
-                except ProtocolIDMismatchError:
-                    pass
-                try:
-                    if data.decode('utf-8') == 'shutdown':
-                        break
-                except UnicodeDecodeError:
-                    pass
+    async def _server_task(self):
+        send_loop_tasks = []
+        recv_loop_task = await curio.spawn(self._recv_loop, send_loop_tasks)
+        async with self._socket:
+            await recv_loop_task.join()
+            for task in send_loop_tasks:
+                await task.cancel()
 
+    async def _recv_loop(self, send_loop_tasks: list):
+        while True:
+            data, client_address = await self._socket.recvfrom(Package.max_size)
+            try:
+                package = Package.from_datagram(data)
+                # create new connection if client is unknown
+                if not client_address in self.connections:
+                    new_connection = Connection(client_address)
+                    new_connection.set_status('Connected')
+                    send_loop_tasks.append(await curio.spawn(new_connection.send_loop, self._socket))
+                    self.connections[client_address] = new_connection
+                self.connections[client_address].recv(package)
+            except ProtocolIDMismatchError:
+                # ignore all non-Pygase packages
+                pass
+            # this is a rudimentary shutdown switch
+            try:
+                if data.decode('utf-8') == 'shutdown':
+                    break
+            except UnicodeDecodeError:
+                pass
+        
     @property
     def hostname(self):
         return self._socket.getsockname()[0]

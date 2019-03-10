@@ -11,7 +11,7 @@ class TestConnection:
         assert connection.local_sequence == 0
         assert connection.remote_sequence == 0
         assert connection.ack_bitfield == '0'*32
-        connection.update(Package(sequence=1, ack=0, ack_bitfield='0'*32))
+        connection.recv(Package(sequence=1, ack=0, ack_bitfield='0'*32))
         assert connection.local_sequence == 0
         assert connection.remote_sequence == 1
         assert connection.ack_bitfield == '0'*32
@@ -20,7 +20,7 @@ class TestConnection:
         connection = Connection(('host', 1234))
         connection.remote_sequence = sqn(1)
         connection.ack_bitfield = '0'*32
-        connection.update(Package(sequence=2, ack=1, ack_bitfield='0'*32))
+        connection.recv(Package(sequence=2, ack=1, ack_bitfield='0'*32))
         assert connection.remote_sequence == 2
         assert connection.ack_bitfield == '1' + '0'*31
 
@@ -28,7 +28,7 @@ class TestConnection:
         connection = Connection(('host', 1234))
         assert connection.remote_sequence == 0
         assert connection.ack_bitfield == '0'*32
-        connection.update(Package(sequence=2, ack=0, ack_bitfield='0'*32))
+        connection.recv(Package(sequence=2, ack=0, ack_bitfield='0'*32))
         assert connection.remote_sequence == 2
         assert connection.ack_bitfield == '0'*32
 
@@ -36,7 +36,7 @@ class TestConnection:
         connection = Connection(('host', 1234))
         connection.remote_sequence = sqn(2)
         connection.ack_bitfield = '0'*32
-        connection.update(Package(sequence=1, ack=1, ack_bitfield='0'*32))
+        connection.recv(Package(sequence=1, ack=1, ack_bitfield='0'*32))
         assert connection.remote_sequence == 2
         assert connection.ack_bitfield == '1' + '0'*31
 
@@ -44,13 +44,13 @@ class TestConnection:
         connection = Connection(('host', 1234))
         connection.remote_sequence = sqn(100)
         connection.ack_bitfield = '0110' + '1'*28
-        connection.update(Package(sequence=101, ack=100, ack_bitfield='1'*32))
+        connection.recv(Package(sequence=101, ack=100, ack_bitfield='1'*32))
         assert connection.remote_sequence == 101
         assert connection.ack_bitfield == '10110' + '1'*27
-        connection.update(Package(sequence=99, ack=100, ack_bitfield='1'*32))
+        connection.recv(Package(sequence=99, ack=100, ack_bitfield='1'*32))
         assert connection.remote_sequence == 101
         assert connection.ack_bitfield == '11110' + '1'*27
-        connection.update(Package(sequence=96, ack=101, ack_bitfield='1'*32))
+        connection.recv(Package(sequence=96, ack=101, ack_bitfield='1'*32))
         assert connection.remote_sequence == 101
         assert connection.ack_bitfield == '1'*32
 
@@ -58,13 +58,13 @@ class TestConnection:
         connection = Connection(('host', 1234))
         connection.remote_sequence = sqn(500)
         connection.ack_bitfield = '1'*32
-        connection.update(Package(sequence=501, ack=500, ack_bitfield='1'*32))
+        connection.recv(Package(sequence=501, ack=500, ack_bitfield='1'*32))
         with pytest.raises(DuplicateSequenceError):
-            connection.update(Package(sequence=501, ack=500, ack_bitfield='1'*32))
+            connection.recv(Package(sequence=501, ack=500, ack_bitfield='1'*32))
 
     def test_update_duplicate_package_out_of_sequence(self):
         connection = Connection(('host', 1234))
         connection.remote_sequence = sqn(1000)
         connection.ack_bitfield = '1'*32
         with pytest.raises(DuplicateSequenceError):
-            connection.update(Package(sequence=990, ack=500, ack_bitfield='1'*32))
+            connection.recv(Package(sequence=990, ack=500, ack_bitfield='1'*32))
