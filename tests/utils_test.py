@@ -1,5 +1,18 @@
 import pytest
-from pygase.utils import sqn
+from pygase.utils import sqn, Sendable
+
+class TestSendable:
+
+    def test_bytepacking(self):
+        SomeClass = type('SomeClass', (Sendable,), {'bar': 'baz'})
+        foo = SomeClass()
+        foo.hello = {',': ['World', '!']}
+        bytepack = foo.to_bytes()
+        unpacked_foo = SomeClass.from_bytes(bytepack)
+        assert unpacked_foo.__dict__ == foo.__dict__
+        with pytest.raises(TypeError) as exception:
+            SomeClass.from_bytes('This is not a Sendable'.encode('utf-8'))
+        assert str(exception.value) == 'Bytes could no be parsed into SomeClass.'
 
 class TestSqn:
 

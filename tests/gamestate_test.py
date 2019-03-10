@@ -14,17 +14,7 @@ class TestGameState:
         paused_game_state.game_status = GameStatus.get('Paused')
         assert game_state == paused_game_state
 
-    def test_game_state_bytepacking(self):
-        game_state = GameState()
-        game_state.test_pos = 2.5
-        bytepack = game_state.to_bytes()
-        unpacked_game_state = GameState.from_bytes(bytepack)
-        assert game_state == unpacked_game_state
-        with pytest.raises(TypeError) as exception:
-            GameState.from_bytes(
-                'This is not a GameState'.encode('utf-8')
-            )
-        assert str(exception.value) == 'Bytes could no be parsed into GameState.'
+class TestGameStateUpdate:
 
     def test_update_arithmetic(self):
         game_state = GameState(

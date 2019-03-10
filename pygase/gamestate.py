@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from pygase.utils import Sendable, NamedEnum
+from pygase.utils import Sendable, NamedEnum, sqn
 
-# Unique 4-byte token to mark GameState entries for deletion
+# unique 4-byte token to mark GameState entries for deletion
 TO_DELETE = bytes.fromhex('d281e5ba')
 
 class GameStatus(NamedEnum):
@@ -20,7 +20,7 @@ class GameState(Sendable):
 
     def __init__(self, time_order=0, game_status=GameStatus.get('Paused')):
         self.game_status = game_status
-        self.time_order = time_order
+        self.time_order = sqn(time_order)
         self.players = {}
 
     def is_paused(self):
@@ -29,6 +29,7 @@ class GameState(Sendable):
         '''
         return self.game_status == GameStatus.get('Paused')
 
+    # This should be eliminated, as soon as concurrency has been improved with curio
     def iter(self, dict_attr: str):
         '''
         Returns a representation of the *GameState* attribute *dict_attr* that is safe to
@@ -51,7 +52,7 @@ class GameState(Sendable):
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
-            return self.game_status == other.game_status
+            return self.time_order == other.time_order
         return False
 
     def __ne__(self, other):
@@ -60,9 +61,9 @@ class GameState(Sendable):
 class GameStateUpdate(Sendable):
     '''
     Represents a set of changes to carry out on a *GameState*.
-    The server keep a *time_order* counter and labels all updates in ascending order.
+    The server keeps a *time_order* counter and labels all updates in ascending order.
 
-    Keywords are *GameState* atttribute names. If you want to remove some key from the
+    Keywords are *GameState* attribute names. If you want to remove some key from the
     game state (*GameState* attributes themselves can also be deleted, which removes them from
     the object altogether), just assign *TO_DELETE* to it in the update.
 
@@ -73,9 +74,9 @@ class GameStateUpdate(Sendable):
     also heavier update (meaning it will contain more data).
     '''
 
-    def __init__(self, time_order=0, **kwargs):
+    def __init__(self, time_order: int, **kwargs):
         self.__dict__ = kwargs
-        self.time_order = time_order
+        self.time_order = sqn(time_order)
 
     # Adding to another update should return an updated update
     def __add__(self, other):

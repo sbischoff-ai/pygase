@@ -29,5 +29,5 @@ setup(
         'Development Status :: 3 - Alpha'
     ],
     packages=['pygase'],
-    install_requires=['u-msgpack-python']
+    install_requires=['u-msgpack-python', 'ifaddr', 'curio']
 )

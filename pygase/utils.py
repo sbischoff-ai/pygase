@@ -1,20 +1,19 @@
 # -*- coding: utf-8 -*-
 
 import umsgpack
+import ifaddr
 
 class Sendable:
     '''
-    Mixin for classes that are supposed to be sendable as part of a server request or response.
-    Sendables can only have basic Python types as attributes and their constructor needs
-    to be callable without passing any arguments.
+    Mixin for classes that are supposed to be sendable as part of a Pygase package.
+    Sendables can only have basic Python types as attributes.
     '''
 
     def to_bytes(self):
         '''
-        Packs and return a small a binary representation of self.
-
+        Packs and returns a small a binary representation of self.
         '''
-        return umsgpack.packb(self.__dict__)
+        return umsgpack.packb(self.__dict__, force_float_precision='single')
 
     @classmethod
     def from_bytes(cls, bytepack: bytes):
@@ -22,8 +21,9 @@ class Sendable:
         Returns a copy of the object that was packed into byte format.
         '''
         try:
-            received_sendable = cls()
+            received_sendable = object.__new__(type('', (), {}))
             received_sendable.__dict__ = umsgpack.unpackb(bytepack)
+            received_sendable.__class__ = cls
             return received_sendable
         except (umsgpack.InsufficientDataException, KeyError, TypeError):
             raise TypeError('Bytes could no be parsed into ' + cls.__name__ + '.')
@@ -85,3 +85,16 @@ class sqn(int):
     @classmethod
     def from_bytes(cls, b):
         return cls(super().from_bytes(b, 'big'))
+
+def get_available_ip_addresses():
+    """
+    Returns a list of all available IP addresses the server can be bound to.
+    Keep in mind that `127.0.0.1` is only suitable for local games.
+    """
+    addresses = []
+    for adapter in ifaddr.get_adapters():
+        for ip_addr in adapter.ips:
+            if ip_addr.is_IPv4 and ip_addr.ip[:3] in {"10.", "172", "192", "127"}:
+                # only local IPv4 addresses
+                addresses.append(ip_addr.ip)
+    return addresses
