@@ -78,6 +78,7 @@ class Connection:
      - **remote_address** *(str, int)*: A tuple `('hostname', port)` *required*
 
     ### Attributes
+     - **remote_address** *(str, int)*: A tuple `('hostname', port)`
      - **local_sequence** *int*: sequence number of the last sent package
      - **remote_sequence** *int*: sequence number of the last received package
     A sequence of `0` means no packages have been sent or received.
@@ -87,14 +88,18 @@ class Connection:
         `'1'` means the package has been received, `'0'` means it hasn't.
      - **latency**: the last registered RTT (round trip time)
      - **status** *int*: A **ConnectionStatus** value.
-     - **remote_address** *(str, int)*: A tuple `('hostname', port)`
+     - **quality** *str*: Either `'good'` or `'bad'`, depending on latency. Is used internally for
+        congestion avoidance.
     '''
 
+    timeout = 5.0 # connection timeout in seconds
+    max_throttle_time = 60.0
+    min_throttle_time = 1.0
     _package_intervals = {
         'good': 1/40,
         'bad': 1/20
-    }
-    timeout = 5 # connection timeout in seconds
+    } # maps connection.quality to time between sent packages in seconds
+    _latency_threshold = 0.25 # latency that will trigger connection throttling
 
     def __init__(self, remote_address):
         self.remote_address = remote_address
@@ -103,10 +108,10 @@ class Connection:
         self.ack_bitfield = '0'*32
         self.latency = None
         self.status = ConnectionStatus.get('Connecting')
-        self.quality = 'good'
+        self.package_interval = self._package_intervals['good']
+        self.quality = 'good' # this is used for congestion avoidance
         self._pending_acks = {}
         self._last_recv = time.time()
-        self._latency_threshold = 0.25 # latency that will throttle the connection
 
     def recv(self, received_package: Package):
         '''
@@ -151,30 +156,21 @@ class Connection:
         Coroutine that, once spawned, will keep sending packages to the remote_address until it is explicitly
         cancelled or the connection times out.
         '''
-        congestion_avoidance_monitor_task = await curio.spawn(self._congestion_avoidance_monitor)
+        congestion_avoidance_task = await curio.spawn(self._congestion_avoidance_monitor)
         while True:
             t0 = time.time()
             if t0 - self._last_recv > self.timeout:
                 self.status = ConnectionStatus.get('Disconnected')
                 break
             await self._send_next_package(socket)
-            await curio.sleep(max([self._package_intervals[self.quality] - time.time() + t0, 0]))
-        congestion_avoidance_monitor_task.cancel()
+            await curio.sleep(max([self.package_interval - time.time() + t0, 0]))
+        await congestion_avoidance_task.cancel()
 
     async def _send_next_package(self, socket):
         self.local_sequence += 1
         package = Package(self.local_sequence, self.remote_sequence, self.ack_bitfield)
         await socket.sendto(package.to_datagram(), self.remote_address)
         self._pending_acks[package.sequence] = time.time()
-
-    async def _congestion_avoidance_monitor(self):
-        while True:
-            if self.latency is not None:
-                if self.latency > self._latency_threshold and self.quality == 'good':
-                    self.quality = 'bad'
-                elif self.latency < self._latency_threshold and self.quality == 'bad':
-                    self.quality = 'good'
-            curio.sleep(1)
 
     def set_status(self, status: str):
         self.status = ConnectionStatus.get(status)
@@ -185,3 +181,29 @@ class Connection:
         else:
             # smoothed moving average to filter out network jitter
             self.latency += 0.1 * (rtt - self.latency)
+
+    async def _congestion_avoidance_monitor(self):
+        throttle_time = self.min_throttle_time
+        last_quality_change = time.time()
+        last_good_quality_milestone = time.time()
+        while True:
+            t = time.time()
+            if self.quality == 'good':
+                if self.latency > self._latency_threshold: # switch to bad mode
+                    self.quality = 'bad'
+                    self.package_interval = self._package_intervals['bad']
+                    # if good conditions didn't last at least the throttle time, increase it
+                    if t - last_quality_change < throttle_time:
+                        throttle_time = min([throttle_time*2.0, self.max_throttle_time])
+                    last_quality_change = t
+                # if good conditions lasted throttle time since last milestone
+                elif t - last_good_quality_milestone > throttle_time:
+                    self.package_interval = self._package_intervals['good']
+                    throttle_time = max([throttle_time/2.0, self.min_throttle_time])
+                    last_good_quality_milestone = t
+            else: # self.quality == 'bad'
+                if self.latency < self._latency_threshold: # switch to good mode
+                    self.quality = 'good'
+                    last_quality_change = t
+                    last_good_quality_milestone = t
+            await curio.sleep(throttle_time)
