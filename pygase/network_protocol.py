@@ -14,11 +14,11 @@ class DuplicateSequenceError(ConnectionError):
 
 class Package:
 
-    timeout = 1 # package timeout in seconds
+    timeout = 1.0 # package timeout in seconds
     max_size = 2048 # the maximum size of Pygase package in bytes
     _protocol_id = bytes.fromhex('ffd0fab9') # unique 4 byte identifier for pygase packages
 
-    def __init__(self, sequence: int, ack: int, ack_bitfield: str, payload:bytes=None):
+    def __init__(self, sequence:int, ack:int, ack_bitfield:str, payload:bytes=None):
         self.sequence = sqn(sequence)
         self.ack = sqn(ack)
         self.ack_bitfield = ack_bitfield
@@ -28,6 +28,9 @@ class Package:
         '''
         ### Returns
           *bytes*: compact bytestring representing the package, which can be sent via a datagram socket
+        
+        ### Raises
+         - **OverflowError**: if the resulting datagram would exceed **max_size**
         '''
         datagram = bytearray(self._protocol_id)
         datagram.extend(self.sequence.to_bytes())
@@ -38,11 +41,11 @@ class Package:
             datagram.extend(self.payload)
         datagram = bytes(datagram)
         if len(datagram) > self.max_size:
-            raise OverflowError('package exceeds the maximum size of ' + self.max_size + ' bytes')
+            raise OverflowError('package exceeds the maximum size of ' + str(self.max_size) + ' bytes')
         return bytes(datagram)
 
     @classmethod
-    def from_datagram(cls, datagram: bytes):
+    def from_datagram(cls, datagram:bytes):
         '''
         ### Arguments
          - **datagram** *bytes*: bytestring data, typically received via a socket
@@ -63,6 +66,14 @@ class Package:
         else:
             payload = None
         return Package(sequence, ack, ack_bitfield, payload)
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.__dict__ == other.__dict__
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 class ConnectionStatus(NamedEnum):
     pass
@@ -106,22 +117,22 @@ class Connection:
         self.local_sequence = sqn(0)
         self.remote_sequence = sqn(0)
         self.ack_bitfield = '0'*32
-        self.latency = 0
+        self.latency = 0.0
         self.status = ConnectionStatus.get('Connecting')
         self.package_interval = self._package_intervals['good']
         self.quality = 'good' # this is used for congestion avoidance
         self._pending_acks = {}
         self._last_recv = time.time()
 
-    def recv(self, received_package: Package):
+    def recv(self, received_package:Package):
         '''
-        Updates `remote_sequence` and `ack_bitfield` based on a received package.
+        Updates `remote_sequence` and `ack_bitfield` based on a received package and resolves package loss.
         
         ### Raises
          - **DuplicateSequenceError**: if a package with the same sequence has already been received
         '''
         self._last_recv = time.time()
-        self.status = ConnectionStatus.get('Connected')
+        self.set_status('Connected')
         if self.remote_sequence == 0:
             self.remote_sequence = received_package.sequence
             return
@@ -160,6 +171,7 @@ class Connection:
         while True:
             t0 = time.time()
             if t0 - self._last_recv > self.timeout:
+                self.set_status('Disconnected')
                 await event_queue.put('shutdown') # should be a proper timeout event
                 break
             await self._send_next_package(socket)
@@ -172,35 +184,39 @@ class Connection:
         await socket.sendto(package.to_datagram(), self.remote_address)
         self._pending_acks[package.sequence] = time.time()
 
-    def set_status(self, status: str):
+    def set_status(self, status:str):
         self.status = ConnectionStatus.get(status)
 
-    def update_latency(self, rtt: int):
+    def update_latency(self, rtt:int):
         # smoothed moving average to filter out network jitter
         self.latency += 0.1 * (rtt - self.latency)
 
     async def _congestion_avoidance_monitor(self):
-        throttle_time = self.min_throttle_time
-        last_quality_change = time.time()
-        last_good_quality_milestone = time.time()
+        state = {
+            'throttle_time': self.min_throttle_time,
+            'last_quality_change': time.time(),
+            'last_good_quality_milestone': time.time()
+        }
         while True:
-            t = time.time()
-            if self.quality == 'good':
-                if self.latency > self._latency_threshold: # switch to bad mode
-                    self.quality = 'bad'
-                    self.package_interval = self._package_intervals['bad']
-                    # if good conditions didn't last at least the throttle time, increase it
-                    if t - last_quality_change < throttle_time:
-                        throttle_time = min([throttle_time*2.0, self.max_throttle_time])
-                    last_quality_change = t
-                # if good conditions lasted throttle time since last milestone
-                elif t - last_good_quality_milestone > throttle_time:
-                    self.package_interval = self._package_intervals['good']
-                    throttle_time = max([throttle_time/2.0, self.min_throttle_time])
-                    last_good_quality_milestone = t
-            else: # self.quality == 'bad'
-                if self.latency < self._latency_threshold: # switch to good mode
-                    self.quality = 'good'
-                    last_quality_change = t
-                    last_good_quality_milestone = t
-            await curio.sleep(throttle_time)
+            self._throttling_state_machine(time.time(), state)
+            await curio.sleep(Connection.min_throttle_time/2.0)
+
+    def _throttling_state_machine(self, t:int, state:dict):
+        if self.quality == 'good':
+            if self.latency > self._latency_threshold: # switch to bad mode
+                self.quality = 'bad'
+                self.package_interval = self._package_intervals['bad']
+                # if good conditions didn't last at least the throttle time, increase it
+                if t - state['last_quality_change'] < state['throttle_time']:
+                    state['throttle_time'] = min([state['throttle_time']*2.0, self.max_throttle_time])
+                state['last_quality_change'] = t
+            # if good conditions lasted throttle time since last milestone
+            elif t - state['last_good_quality_milestone'] > state['throttle_time']:
+                self.package_interval = self._package_intervals['good']
+                state['throttle_time'] = max([state['throttle_time']/2.0, self.min_throttle_time])
+                state['last_good_quality_milestone'] = t
+        else: # self.quality == 'bad'
+            if self.latency < self._latency_threshold: # switch to good mode
+                self.quality = 'good'
+                state['last_quality_change'] = t
+                state['last_good_quality_milestone'] = t

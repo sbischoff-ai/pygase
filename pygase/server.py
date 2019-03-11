@@ -12,7 +12,7 @@ class Server:
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._event_queue = curio.UniversalQueue()
 
-    def run(self, port=0, hostname='localhost'):
+    def run(self, port:int=0, hostname:str='localhost'):
         self._socket.bind((hostname, port))
         curio.run(self._server_task)
     
@@ -24,7 +24,7 @@ class Server:
             for task in send_loop_tasks:
                 await task.cancel()
 
-    async def _recv_loop(self, send_loop_tasks: list):
+    async def _recv_loop(self, send_loop_tasks:list):
         while True:
             data, client_address = await self._socket.recvfrom(Package.max_size)
             try:

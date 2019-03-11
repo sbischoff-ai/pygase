@@ -50,13 +50,6 @@ class GameState(Sendable):
     def __gt__(self, other):
         return self.time_order > other.time_order
 
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.time_order == other.time_order
-        return False
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
 
 class GameStateUpdate(Sendable):
     '''
