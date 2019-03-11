@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-#import threading
+import threading
 
 import curio
 from curio import socket
@@ -11,25 +11,29 @@ class Client:
 
     def __init__(self):
         self.connection = None
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        #self._connection_thread = None
+        self._event_queue = curio.UniversalQueue()
+        self._connection_thread = None
 
-    def connect(self, remote_hostname, remote_port):
-        self.connection = Connection((remote_hostname, remote_port))
-        curio.run(self._client_task)
+    def connect(self, port:int, hostname:str='localhost'):
+        self.connection = Connection((hostname, port))
+        self._connection_thread = threading.Thread(target=curio.run, args=(self._client_task,))
+        self._connection_thread.start()
 
     async def _client_task(self):
-        send_loop_task = await curio.spawn(self.connection.send_loop, self._socket)
-        recv_loop_task = await curio.spawn(self._recv_loop)
-        await curio.sleep(6) # For testing purposes, the client only runs 1 second
-        async with self._socket:
+        async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            send_loop_task = await curio.spawn(self.connection.send_loop, sock, self._event_queue)
+            recv_loop_task = await curio.spawn(self._recv_loop, sock)
+            # handle events
+            while True:
+                event = await self._event_queue.get()
+                if event == 'shutdown':
+                    await sock.sendto('shutdown'.encode('utf-8'), self.connection.remote_address)
+                    break
             await recv_loop_task.cancel()
-            await send_loop_task.join()
-            await self._socket.sendto('shutdown'.encode('utf-8'), self.connection.remote_address)
+            await send_loop_task.cancel()
 
-    async def _recv_loop(self):
+    async def _recv_loop(self, sock):
         while True:
-            data = await self._socket.recv(Package.max_size)
+            data = await sock.recv(Package.max_size)
             package = Package.from_datagram(data)
             self.connection.recv(package)
-

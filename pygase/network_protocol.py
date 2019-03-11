@@ -106,7 +106,7 @@ class Connection:
         self.local_sequence = sqn(0)
         self.remote_sequence = sqn(0)
         self.ack_bitfield = '0'*32
-        self.latency = None
+        self.latency = 0
         self.status = ConnectionStatus.get('Connecting')
         self.package_interval = self._package_intervals['good']
         self.quality = 'good' # this is used for congestion avoidance
@@ -144,14 +144,14 @@ class Connection:
             sequence_diff = received_package.ack - pending_sequence
             if sequence_diff < 0:
                 continue
-            elif sequence_diff == 0 or (sequence_diff <= 32 and received_package.ack_bitfield[sequence_diff] == '1'):
+            elif sequence_diff == 0 or (sequence_diff < 33 and received_package.ack_bitfield[sequence_diff-1] == '1'):
                 self.update_latency(time.time() - self._pending_acks[pending_sequence])
                 del self._pending_acks[pending_sequence]
             elif time.time() - self._pending_acks[pending_sequence] > Package.timeout:
                 del self._pending_acks[pending_sequence]
                 # package loss should be dealt with here
 
-    async def send_loop(self, socket):
+    async def send_loop(self, socket, event_queue):
         '''
         Coroutine that, once spawned, will keep sending packages to the remote_address until it is explicitly
         cancelled or the connection times out.
@@ -160,7 +160,7 @@ class Connection:
         while True:
             t0 = time.time()
             if t0 - self._last_recv > self.timeout:
-                self.status = ConnectionStatus.get('Disconnected')
+                await event_queue.put('shutdown') # should be a proper timeout event
                 break
             await self._send_next_package(socket)
             await curio.sleep(max([self.package_interval - time.time() + t0, 0]))
@@ -176,11 +176,8 @@ class Connection:
         self.status = ConnectionStatus.get(status)
 
     def update_latency(self, rtt: int):
-        if self.latency is None:
-            self.latency == rtt
-        else:
-            # smoothed moving average to filter out network jitter
-            self.latency += 0.1 * (rtt - self.latency)
+        # smoothed moving average to filter out network jitter
+        self.latency += 0.1 * (rtt - self.latency)
 
     async def _congestion_avoidance_monitor(self):
         throttle_time = self.min_throttle_time

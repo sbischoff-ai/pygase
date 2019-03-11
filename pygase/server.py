@@ -10,15 +10,16 @@ class Server:
     def __init__(self):
         self.connections = {}
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._event_queue = curio.UniversalQueue()
 
-    def run(self, hostname='localhost', port=0):
+    def run(self, port=0, hostname='localhost'):
         self._socket.bind((hostname, port))
         curio.run(self._server_task)
     
     async def _server_task(self):
-        send_loop_tasks = []
-        recv_loop_task = await curio.spawn(self._recv_loop, send_loop_tasks)
         async with self._socket:
+            send_loop_tasks = []
+            recv_loop_task = await curio.spawn(self._recv_loop, send_loop_tasks)
             await recv_loop_task.join()
             for task in send_loop_tasks:
                 await task.cancel()
@@ -32,7 +33,7 @@ class Server:
                 if not client_address in self.connections:
                     new_connection = Connection(client_address)
                     new_connection.set_status('Connected')
-                    send_loop_tasks.append(await curio.spawn(new_connection.send_loop, self._socket))
+                    send_loop_tasks.append(await curio.spawn(new_connection.send_loop, self._socket, self._event_queue))
                     self.connections[client_address] = new_connection
                 self.connections[client_address].recv(package)
             except ProtocolIDMismatchError:
