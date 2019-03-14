@@ -3,8 +3,10 @@
 import time
 
 import curio
+from curio import socket
 
 from pygase.utils import Sendable, NamedEnum, sqn
+from pygase.event import Event
 
 class ProtocolIDMismatchError(ValueError):
     pass
@@ -18,11 +20,29 @@ class Package:
     max_size = 2048 # the maximum size of Pygase package in bytes
     _protocol_id = bytes.fromhex('ffd0fab9') # unique 4 byte identifier for pygase packages
 
-    def __init__(self, sequence:int, ack:int, ack_bitfield:str, payload:bytes=None):
+    def __init__(self, sequence:int, ack:int, ack_bitfield:str, events:list=None):
         self.sequence = sqn(sequence)
         self.ack = sqn(ack)
         self.ack_bitfield = ack_bitfield
-        self.payload = payload # event protocol (contains various events + stateupdate if for client or last known state if for server)
+        self._events = events if events is not None else []
+        self._datagram = None
+
+    @property
+    def events(self):
+        return self._events.copy()
+
+    def add_event(self, event):
+        if self._datagram is not None:
+            bytepack = event.to_bytes()
+            if len(self._datagram) + len(bytepack) + 2 > self.max_size:
+                raise OverflowError('package exceeds the maximum size of ' + str(self.max_size) + ' bytes')
+            self._datagram += len(bytepack).to_bytes(2, 'big') + bytepack
+        self._events.append(event)
+
+    def get_bytesize(self):
+        if self._datagram is None:
+            self._datagram = self.to_datagram()
+        return len(self._datagram)
 
     def to_datagram(self):
         '''
@@ -32,17 +52,22 @@ class Package:
         ### Raises
          - **OverflowError**: if the resulting datagram would exceed **max_size**
         '''
+        if self._datagram is not None:
+            return self._datagram
         datagram = bytearray(self._protocol_id)
         datagram.extend(self.sequence.to_bytes())
         datagram.extend(self.ack.to_bytes())
         datagram.extend(int(self.ack_bitfield, 2).to_bytes(4, 'big'))
         # The header makes up the first 12 bytes of the package
-        if self.payload is not None:
-            datagram.extend(self.payload)
+        for event in self._events:
+            bytepack = event.to_bytes()
+            datagram.extend(len(bytepack).to_bytes(2, 'big'))
+            datagram.extend(bytepack)
         datagram = bytes(datagram)
         if len(datagram) > self.max_size:
             raise OverflowError('package exceeds the maximum size of ' + str(self.max_size) + ' bytes')
-        return bytes(datagram)
+        self._datagram = bytes(datagram)
+        return self._datagram
 
     @classmethod
     def from_datagram(cls, datagram:bytes):
@@ -61,11 +86,15 @@ class Package:
         sequence = sqn.from_bytes(datagram[4:6])
         ack = sqn.from_bytes(datagram[6:8])
         ack_bitfield = bin(int.from_bytes(datagram[8:12], 'big'))[2:].zfill(32)
-        if len(datagram) > 12:
-            payload = datagram[12:]
-        else:
-            payload = None
-        return Package(sequence, ack, ack_bitfield, payload)
+        payload = datagram[12:]
+        events = []
+        while len(payload) > 0:
+            bytesize = int.from_bytes(payload[:2], 'big')
+            events.append(Event.from_bytes(payload[2:bytesize+2]))
+            payload = payload[bytesize+2:]
+        result = Package(sequence, ack, ack_bitfield, events)
+        result._datagram = datagram
+        return result
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -121,12 +150,15 @@ class Connection:
         self.status = ConnectionStatus.get('Connecting')
         self.package_interval = self._package_intervals['good']
         self.quality = 'good' # this is used for congestion avoidance
+        self._outgoing_event_queue = curio.UniversalQueue()
+        self._incoming_event_queue = curio.UniversalQueue()
         self._pending_acks = {}
         self._last_recv = time.time()
 
-    def recv(self, received_package:Package):
+    async def _recv(self, received_package:Package):
         '''
-        Updates `remote_sequence` and `ack_bitfield` based on a received package and resolves package loss.
+        Updates `remote_sequence` and `ack_bitfield` based on a received package, resolves package loss
+        and puts the received events in the queue of incoming events.
         
         ### Raises
          - **DuplicateSequenceError**: if a package with the same sequence has already been received
@@ -161,8 +193,18 @@ class Connection:
             elif time.time() - self._pending_acks[pending_sequence] > Package.timeout:
                 del self._pending_acks[pending_sequence]
                 # package loss should be dealt with here
+        for event in received_package.events:
+            await self._incoming_event_queue.put(event)
 
-    async def send_loop(self, socket, event_queue):
+    def dispatch_event(self, event):
+        self._outgoing_event_queue.put(event)
+
+    def handle_next_event(self, event_handler):
+        event = self._incoming_event_queue.get()
+        event_handler(event)
+        self._incoming_event_queue.task_done()
+
+    async def _send_loop(self, sock):
         '''
         Coroutine that, once spawned, will keep sending packages to the remote_address until it is explicitly
         cancelled or the connection times out.
@@ -172,16 +214,20 @@ class Connection:
             t0 = time.time()
             if t0 - self._last_recv > self.timeout:
                 self.set_status('Disconnected')
-                await event_queue.put('shutdown') # should be a proper timeout event
+                #await self._outgoing_event_queue.put('shutdown') # should be a proper timeout event
                 break
-            await self._send_next_package(socket)
+            await self._send_next_package(sock)
             await curio.sleep(max([self.package_interval - time.time() + t0, 0]))
         await congestion_avoidance_task.cancel()
 
-    async def _send_next_package(self, socket):
+    async def _send_next_package(self, sock):
         self.local_sequence += 1
         package = Package(self.local_sequence, self.remote_sequence, self.ack_bitfield)
-        await socket.sendto(package.to_datagram(), self.remote_address)
+        while len(package.events) < 5 and not self._outgoing_event_queue.empty():
+            event = await self._outgoing_event_queue.get()
+            package.add_event(event)
+            await self._outgoing_event_queue.task_done()
+        await sock.sendto(package.to_datagram(), self.remote_address)
         self._pending_acks[package.sequence] = time.time()
 
     def set_status(self, status:str):
@@ -220,3 +266,63 @@ class Connection:
                 self.quality = 'good'
                 state['last_quality_change'] = t
                 state['last_good_quality_milestone'] = t
+
+class ClientConnection(Connection):
+
+    def __init__(self, remote_address):
+        super().__init__(remote_address)
+        self._command_queue = curio.UniversalQueue()
+
+    def shutdown(self):
+        self._command_queue.put('shutdown')
+
+    async def loop(self):
+        async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            send_loop_task = await curio.spawn(self._send_loop, sock)
+            recv_loop_task = await curio.spawn(self._client_recv_loop, sock)
+            # check for disconnect event
+            while True:
+                command = await self._command_queue.get()
+                if command == 'shutdown':
+                    # this is only for testing purposes
+                    await sock.sendto('shutdown'.encode('utf-8'), self.remote_address)
+                    break
+            await recv_loop_task.cancel()
+            await send_loop_task.cancel()
+
+    async def _client_recv_loop(self, sock):
+        while True:
+            # somehow await the first sendto call here
+            data = await sock.recv(Package.max_size)
+            package = Package.from_datagram(data)
+            await self._recv(package)
+
+class ServerConnection(Connection):
+
+    @classmethod
+    async def loop(cls, hostname:str, port:int, connections:dict):
+        async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.bind((hostname, port))
+            send_loop_tasks = [] # should be replaced by curio.TaskGroup()
+            while True:
+                data, client_address = await sock.recvfrom(Package.max_size)
+                try:
+                    package = Package.from_datagram(data)
+                    # create new connection if client is unknown
+                    if not client_address in connections:
+                        new_connection = cls(client_address)
+                        new_connection.set_status('Connected')
+                        send_loop_tasks.append(await curio.spawn(new_connection._send_loop, sock))
+                        connections[client_address] = new_connection
+                    await connections[client_address]._recv(package)
+                except ProtocolIDMismatchError:
+                    # ignore all non-Pygase packages
+                    pass
+                # this is a rudimentary shutdown switch
+                try:
+                    if data.decode('utf-8') == 'shutdown':
+                        break
+                except UnicodeDecodeError:
+                    pass
+            for task in send_loop_tasks:
+                await task.cancel()
