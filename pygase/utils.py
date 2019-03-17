@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import umsgpack
-import ifaddr
+#import ifaddr
 
 class Sendable:
     '''
@@ -98,7 +98,7 @@ class sqn(int):
     @classmethod
     def from_bytes(cls, b):
         return cls(super().from_bytes(b, 'big'))
-
+'''
 def get_available_ip_addresses():
     """
     Returns a list of all available IP addresses the server can be bound to.
@@ -111,3 +111,4 @@ def get_available_ip_addresses():
                 # only local IPv4 addresses
                 addresses.append(ip_addr.ip)
     return addresses
+'''

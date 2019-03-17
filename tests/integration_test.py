@@ -1,5 +1,31 @@
 # -*- coding: utf-8 -*-
 
+import time
+
+
+from pygase import Client, Server
+from pygase.event import EventType
+
+EventType.register('Test')
+
+class TestIntegration:
+
+    test_value = 0
+
+    def handler(self, data):
+        TestIntegration.test_value = sum(data)
+
+    def test_run_threadig_and_send_simple_event(self):
+        server = Server()
+        client = Client()
+        server.push_event_handler('Test', self.handler)
+        server_thread = server.run_in_thread(1234)
+        client.connect_in_thread(1234)
+        client.dispatch_event('Test', (1,2,3,4))
+        client.connection.shutdown()
+        server_thread.join()
+        assert TestIntegration.test_value == 10
+            
 '''
 import time
 import pygase.client

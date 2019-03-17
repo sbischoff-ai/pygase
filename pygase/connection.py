@@ -141,8 +141,9 @@ class Connection:
     } # maps connection.quality to time between sent packages in seconds
     _latency_threshold = 0.25 # latency that will trigger connection throttling
 
-    def __init__(self, remote_address):
+    def __init__(self, remote_address, event_handler):
         self.remote_address = remote_address
+        self.event_handler = event_handler
         self.local_sequence = sqn(0)
         self.remote_sequence = sqn(0)
         self.ack_bitfield = '0'*32
@@ -199,10 +200,11 @@ class Connection:
     def dispatch_event(self, event):
         self._outgoing_event_queue.put(event)
 
-    def handle_next_event(self, event_handler):
-        event = self._incoming_event_queue.get()
-        event_handler(event)
-        self._incoming_event_queue.task_done()
+    async def _event_loop(self):
+        while True:
+            event = await self._incoming_event_queue.get()
+            self.event_handler.handle_blocking(event)
+            await self._incoming_event_queue.task_done()
 
     async def _send_loop(self, sock):
         '''
@@ -269,8 +271,8 @@ class Connection:
 
 class ClientConnection(Connection):
 
-    def __init__(self, remote_address):
-        super().__init__(remote_address)
+    def __init__(self, remote_address, event_handler):
+        super().__init__(remote_address, event_handler)
         self._command_queue = curio.UniversalQueue()
 
     def shutdown(self):
@@ -280,6 +282,7 @@ class ClientConnection(Connection):
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             send_loop_task = await curio.spawn(self._send_loop, sock)
             recv_loop_task = await curio.spawn(self._client_recv_loop, sock)
+            event_loop_task = await curio.spawn(self._event_loop)
             # check for disconnect event
             while True:
                 command = await self._command_queue.get()
@@ -289,6 +292,7 @@ class ClientConnection(Connection):
                     break
             await recv_loop_task.cancel()
             await send_loop_task.cancel()
+            await event_loop_task.cancel()
 
     async def _client_recv_loop(self, sock):
         while True:
@@ -300,19 +304,22 @@ class ClientConnection(Connection):
 class ServerConnection(Connection):
 
     @classmethod
-    async def loop(cls, hostname:str, port:int, connections:dict):
+    async def loop(cls, hostname:str, port:int, connections:dict, event_handler):
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind((hostname, port))
-            send_loop_tasks = [] # should be replaced by curio.TaskGroup()
+            connection_tasks = curio.TaskGroup()
+            #send_loop_tasks = [] # should be replaced by curio.TaskGroup()
             while True:
                 data, client_address = await sock.recvfrom(Package.max_size)
                 try:
                     package = Package.from_datagram(data)
                     # create new connection if client is unknown
                     if not client_address in connections:
-                        new_connection = cls(client_address)
+                        new_connection = cls(client_address, event_handler)
                         new_connection.set_status('Connected')
-                        send_loop_tasks.append(await curio.spawn(new_connection._send_loop, sock))
+                        #send_loop_tasks.append(await curio.spawn(new_connection._send_loop, sock))
+                        await connection_tasks.spawn(new_connection._send_loop, sock)
+                        await connection_tasks.spawn(new_connection._event_loop)
                         connections[client_address] = new_connection
                     await connections[client_address]._recv(package)
                 except ProtocolIDMismatchError:
@@ -324,5 +331,6 @@ class ServerConnection(Connection):
                         break
                 except UnicodeDecodeError:
                     pass
-            for task in send_loop_tasks:
-                await task.cancel()
+            await connection_tasks.cancel_remaining()
+            #for task in send_loop_tasks:
+            #    await task.cancel()

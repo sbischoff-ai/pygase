@@ -4,7 +4,7 @@ import curio
 
 from pygase.utils import sqn
 from pygase.event import Event
-from pygase.network_protocol import Package, Connection, DuplicateSequenceError, ProtocolIDMismatchError
+from pygase.connection import Package, Connection, DuplicateSequenceError, ProtocolIDMismatchError
 
 class TestPackage:
 
