@@ -5,7 +5,7 @@ import threading
 import curio
 
 from pygase.connection import ClientConnection
-from pygase.event import UniversalEventHandler, Event, EventType
+from pygase.event import UniversalEventHandler, Event
 
 class Client:
 
@@ -27,10 +27,8 @@ class Client:
         thread.start()
         return thread
 
-    def dispatch_event(self, event_name:str, data):
-        event_type = EventType.get(event_name)
-        self.connection.dispatch_event(Event(event_type, data))
+    def dispatch_event(self, event_type:str, handler_args):
+        self.connection.dispatch_event(Event(event_type, handler_args))
 
-    def push_event_handler(self, event_name:str, handler_func):
-        event_type = EventType.get(event_name)
+    def push_event_handler(self, event_type:str, handler_func):
         self._universal_event_handler.push_event_handler(event_type, handler_func)

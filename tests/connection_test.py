@@ -29,7 +29,7 @@ class TestPackage:
 class TestConnection:
 
     def test_recv_first_package(self):
-        connection = Connection(('host', 1234))
+        connection = Connection(('host', 1234), None)
         assert connection.local_sequence == 0
         assert connection.remote_sequence == 0
         assert connection.ack_bitfield == '0'*32
@@ -39,7 +39,7 @@ class TestConnection:
         assert connection.ack_bitfield == '0'*32
 
     def test_recv_second_package(self):
-        connection = Connection(('host', 1234))
+        connection = Connection(('host', 1234), None)
         connection.remote_sequence = sqn(1)
         connection.ack_bitfield = '0'*32
         curio.run(connection._recv(Package(sequence=2, ack=1, ack_bitfield='0'*32)))
@@ -47,7 +47,7 @@ class TestConnection:
         assert connection.ack_bitfield == '1' + '0'*31
 
     def test_recv_second_package_comes_first(self):
-        connection = Connection(('host', 1234))
+        connection = Connection(('host', 1234), None)
         assert connection.remote_sequence == 0
         assert connection.ack_bitfield == '0'*32
         curio.run(connection._recv(Package(sequence=2, ack=0, ack_bitfield='0'*32)))
@@ -55,7 +55,7 @@ class TestConnection:
         assert connection.ack_bitfield == '0'*32
 
     def test_recv_first_package_comes_second(self):
-        connection = Connection(('host', 1234))
+        connection = Connection(('host', 1234), None)
         connection.remote_sequence = sqn(2)
         connection.ack_bitfield = '0'*32
         curio.run(connection._recv(Package(sequence=1, ack=1, ack_bitfield='0'*32)))
@@ -63,7 +63,7 @@ class TestConnection:
         assert connection.ack_bitfield == '1' + '0'*31
 
     def test_recv_three_packages_arrive_out_of_sequence(self):
-        connection = Connection(('host', 1234))
+        connection = Connection(('host', 1234), None)
         connection.remote_sequence = sqn(100)
         connection.ack_bitfield = '0110' + '1'*28
         curio.run(connection._recv(Package(sequence=101, ack=100, ack_bitfield='1'*32)))
@@ -77,7 +77,7 @@ class TestConnection:
         assert connection.ack_bitfield == '1'*32
 
     def test_recv_duplicate_package_in_sequence(self):
-        connection = Connection(('host', 1234))
+        connection = Connection(('host', 1234), None)
         connection.remote_sequence = sqn(500)
         connection.ack_bitfield = '1'*32
         curio.run(connection._recv(Package(sequence=501, ack=500, ack_bitfield='1'*32)))
@@ -85,14 +85,14 @@ class TestConnection:
             curio.run(connection._recv(Package(sequence=501, ack=500, ack_bitfield='1'*32)))
 
     def test_recv_duplicate_package_out_of_sequence(self):
-        connection = Connection(('host', 1234))
+        connection = Connection(('host', 1234), None)
         connection.remote_sequence = sqn(1000)
         connection.ack_bitfield = '1'*32
         with pytest.raises(DuplicateSequenceError):
             curio.run(connection._recv(Package(sequence=990, ack=500, ack_bitfield='1'*32)))
 
     def test_congestion_avoidance(self):
-        connection = Connection(('', 1234))
+        connection = Connection(('', 1234), None)
         state = {
             'throttle_time': Connection.min_throttle_time,
             'last_quality_change': 0.0,
