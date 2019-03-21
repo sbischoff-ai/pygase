@@ -27,8 +27,15 @@ class Client:
         thread.start()
         return thread
 
-    def dispatch_event(self, event_type:str, handler_args):
-        self.connection.dispatch_event(Event(event_type, handler_args))
+    def dispatch_event(self, event_type:str, handler_args:list, retries:int=0, ack_callback=None):
+        event = Event(event_type, handler_args)
+        timeout_callback = None
+        if retries > 0:
+            timeout_callback = lambda: self.dispatch_event(
+                event_type, handler_args,
+                retries-1, ack_callback
+            )
+        self.connection.dispatch_event(event, ack_callback, timeout_callback)
 
     def push_event_handler(self, event_type:str, handler_func):
         self._universal_event_handler.push_event_handler(event_type, handler_func)
