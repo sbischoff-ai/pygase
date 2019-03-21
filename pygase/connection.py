@@ -192,6 +192,9 @@ class Connection:
         self._outgoing_event_queue = curio.UniversalQueue()
         self._incoming_event_queue = curio.UniversalQueue()
         self._pending_acks = {}
+        self._event_callback_sequence = sqn(0)
+        self._events_with_callbacks = {}
+        self._event_callbacks = {}
         self._last_recv = time.time()
 
     def _update_remote_info(self, received_sequence):
@@ -224,20 +227,39 @@ class Connection:
         self._last_recv = time.time()
         self._set_status('Connected')
         self._update_remote_info(received_package.sequence)
-        # resolve pending acks for sent packages
+        # resolve pending acks for sent packages (NEEDS REFACTORING)
         for pending_sequence in list(self._pending_acks):
             sequence_diff = received_package.ack - pending_sequence
             if sequence_diff == 0 or (sequence_diff < 33 and received_package.ack_bitfield[sequence_diff-1] == '1'):
                 self._update_latency(time.time() - self._pending_acks[pending_sequence])
+                if pending_sequence in self._events_with_callbacks:
+                    for event_sequence in self._events_with_callbacks[pending_sequence]:
+                        if self._event_callbacks[event_sequence]['ack'] is not None:
+                            self._event_callbacks[event_sequence]['ack']()
+                            del self._event_callbacks[event_sequence]
+                    del self._events_with_callbacks[pending_sequence]
                 del self._pending_acks[pending_sequence]
             elif time.time() - self._pending_acks[pending_sequence] > Package.timeout:
+                if pending_sequence in self._events_with_callbacks:
+                    for event_sequence in self._events_with_callbacks[pending_sequence]:
+                        if self._event_callbacks[event_sequence]['timeout'] is not None:
+                            self._event_callbacks[event_sequence]['timeout']()
+                            del self._event_callbacks[event_sequence]
+                    del self._events_with_callbacks[pending_sequence]
                 del self._pending_acks[pending_sequence]
-                # package loss should be dealt with here
         for event in received_package.events:
             await self._incoming_event_queue.put(event)
 
-    def dispatch_event(self, event):
-        self._outgoing_event_queue.put(event)
+    def dispatch_event(self, event:Event, ack_callback=None, timeout_callback=None):
+        callback_sequence = 0
+        if ack_callback is not None or timeout_callback is not None:
+            self._event_callback_sequence += 1
+            callback_sequence = self._event_callback_sequence
+            self._event_callbacks[self._event_callback_sequence] = {
+                'ack': ack_callback,
+                'timeout': timeout_callback
+            }
+        self._outgoing_event_queue.put((event, callback_sequence))
 
     async def _handle_next_event(self):
         event = await self._incoming_event_queue.get()
@@ -268,7 +290,12 @@ class Connection:
         self.local_sequence += 1
         package = Package(self.local_sequence, self.remote_sequence, self.ack_bitfield)
         while len(package.events) < 5 and not self._outgoing_event_queue.empty():
-            event = await self._outgoing_event_queue.get()
+            event, callback_sequence = await self._outgoing_event_queue.get()
+            if callback_sequence != 0:
+                if self.local_sequence not in self._events_with_callbacks:
+                    self._events_with_callbacks[self.local_sequence] = [callback_sequence]
+                else:
+                    self._events_with_callbacks[self.local_sequence].append(callback_sequence)
             package.add_event(event)
             await self._outgoing_event_queue.task_done()
         await sock.sendto(package.to_datagram(), self.remote_address)

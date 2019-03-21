@@ -26,7 +26,7 @@ class Server:
         thread.start()
         return thread
 
-    def dispatch_event(self, event_type:str, handler_args, target_client='all'):
+    def dispatch_event(self, event_type:str, handler_args:list, target_client='all'):
         event = Event(event_type, handler_args)
         if target_client == 'all':
             for connection in self.connections.values():

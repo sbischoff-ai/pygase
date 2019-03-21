@@ -246,11 +246,11 @@ class TestConnection:
 
     def test_receive_events(self):
         class EventHandler:
-            handler_has_been_called = False
+            call_count = 0
             def __init__(self):
                 self.events = []
             def handle_blocking(self, event):
-                EventHandler.handler_has_been_called = True
+                EventHandler.call_count += 1
                 self.events.append(event)
         event_handler = EventHandler()
         connection = Connection(('', 0), event_handler)
@@ -261,11 +261,59 @@ class TestConnection:
         assert connection.remote_sequence == 0
         curio.run(connection._recv, package)
         assert not connection._incoming_event_queue.empty()
-        assert not EventHandler.handler_has_been_called
+        assert EventHandler.call_count == 0
         curio.run(connection._handle_next_event)
-        assert EventHandler.handler_has_been_called
+        assert EventHandler.call_count == 1
         assert not connection._incoming_event_queue.empty()
         assert event_handler.events == [event]
         curio.run(connection._handle_next_event)
+        assert EventHandler.call_count == 2
         assert connection._incoming_event_queue.empty()
         assert event_handler.events == [event, event]
+
+    def test_event_ack_callbacks(self):
+        async def sendto(*args): pass
+        sock = type('socket', (), {'sendto': sendto})()
+        class callback:
+            count = 0
+            def __init__(self): callback.count += 1
+        connection = Connection(('', 0), None)
+        event = Event('TEST', [])
+        connection.dispatch_event(event, ack_callback=callback)
+        curio.run(connection._send_next_package, sock)
+        curio.run(connection._recv, Package(1,1,'0'*32))
+        assert callback.count == 1
+        curio.run(connection._recv, Package(2,1,'0'*32))
+        assert callback.count == 1
+        connection.dispatch_event(event, ack_callback=callback)
+        connection.dispatch_event(event)
+        connection.dispatch_event(event, ack_callback=callback)
+        curio.run(connection._send_next_package, sock)
+        assert connection.local_sequence == 2
+        curio.run(connection._recv, Package(3,2,'1'+'0'*31))
+        assert callback.count == 3
+
+    def test_event_timeout_calbacks(self):
+        async def sendto(*args): pass
+        sock = type('socket', (), {'sendto': sendto})()
+        class callback:
+            count = 0
+            def __init__(self): callback.count += 1
+        with freeze_time("2012-01-14 12:00:01") as frozen_time:
+            connection = Connection(('', 0), None)
+            event = Event('TEST', [])
+            connection.dispatch_event(event, timeout_callback=callback)
+            curio.run(connection._send_next_package, sock)
+            curio.run(connection._recv, Package(1,1,'0'*32))
+            assert callback.count == 0
+            frozen_time.tick()
+            frozen_time.tick()
+            curio.run(connection._recv, Package(2,1,'0'*32))
+            assert callback.count == 0
+            connection.dispatch_event(event, timeout_callback=callback)
+            curio.run(connection._send_next_package, sock)
+            frozen_time.tick()
+            frozen_time.tick()
+            curio.run(connection._recv, Package(3,1,'0'*32))
+            assert callback.count == 1
+            
