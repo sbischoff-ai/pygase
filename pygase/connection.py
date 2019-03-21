@@ -8,14 +8,39 @@ from curio import socket
 from pygase.utils import Sendable, NamedEnum, sqn
 from pygase.event import Event
 
-class ProtocolIDMismatchError(ValueError):
-    pass
+class ProtocolIDMismatchError(ValueError): pass
 
-class DuplicateSequenceError(ConnectionError):
-    pass
+class DuplicateSequenceError(ConnectionError): pass
 
 class Package:
+    '''
+    A network package that implements the Pygase protocol and is created, sent, received and resolved by
+    Pygase **Connections**s.
 
+    ### Arguments
+     - **sequence** *int*: sequence number of the package on its senders side of the connection
+     - **ack** *int*: sequence number of the last received package from the recipients side of the connection
+    A sequence of `0` means no packages have been sent or received.
+    After `65535` sequence numbers wrap around to `1`, so they can be stored in 2 bytes.
+     - **ack_bitfield** *str*: A 32 character string representing the 32 packages prior to `remote_sequence`,
+       with the first character corresponding the packge directly preceding it and so forth.
+       `'1'` means the package has been received, `'0'` means it hasn't.
+
+    ### Optional Arguments
+     - **events** *[Event]*: list of Pygase events that is to be attached to this package and sent via network
+
+    ### Class Attributes
+     - **timeout** *float*: time in seconds after which a package is considered to be lost, `1.0` by default
+     - **max_size** int*: maximum size in bytes a package may have
+
+    ### Attributes
+     - **sequence** *sqn*: packages sequence number
+     - **ack** *sqn*: last received remote sequence number
+     - **ack_bitfield** *str*: acknowledgement status of 32 preceding remote sequence numbers as boolean bitstring
+    
+    ### Properties
+     - **events**: iterable of **Event** objects contained in the package
+    '''
     timeout = 1.0 # package timeout in seconds
     max_size = 2048 # the maximum size of Pygase package in bytes
     _protocol_id = bytes.fromhex('ffd0fab9') # unique 4 byte identifier for pygase packages
@@ -31,7 +56,15 @@ class Package:
     def events(self):
         return self._events.copy()
 
-    def add_event(self, event):
+    def add_event(self, event:Event):
+        '''
+        ### Arguments
+         - **event** *Event*: a Pygase event that is to be attached to this package
+        
+        ### Raises
+         - **OverflowError**: if the package had previously been converted to a datagram and
+           and its size with the added event would exceed **max_size**
+        '''
         if self._datagram is not None:
             bytepack = event.to_bytes()
             if len(self._datagram) + len(bytepack) + 2 > self.max_size:
@@ -40,6 +73,10 @@ class Package:
         self._events.append(event)
 
     def get_bytesize(self):
+        '''
+        ### Returns
+        *int*: size of the package as a datagram in bytes
+        '''
         if self._datagram is None:
             self._datagram = self.to_datagram()
         return len(self._datagram)
@@ -47,7 +84,7 @@ class Package:
     def to_datagram(self):
         '''
         ### Returns
-          *bytes*: compact bytestring representing the package, which can be sent via a datagram socket
+        *bytes*: compact bytestring representing the package, which can be sent via a datagram socket
         
         ### Raises
          - **OverflowError**: if the resulting datagram would exceed **max_size**
@@ -104,8 +141,7 @@ class Package:
     def __ne__(self, other):
         return not self.__eq__(other)
 
-class ConnectionStatus(NamedEnum):
-    pass
+class ConnectionStatus(NamedEnum): pass
 ConnectionStatus.register('Disconnected')
 ConnectionStatus.register('Connected')
 ConnectionStatus.register('Connecting')
@@ -116,6 +152,8 @@ class Connection:
 
     ### Arguments
      - **remote_address** *(str, int)*: A tuple `('hostname', port)` *required*
+     - **event_handler**: An object that has a callable `handle()` attribute that takes
+       an **Event** as argument, for example a **Pygase.event.UniversalEventHandler** instance
 
     ### Attributes
      - **remote_address** *(str, int)*: A tuple `('hostname', port)`
@@ -141,7 +179,7 @@ class Connection:
     } # maps connection.quality to time between sent packages in seconds
     _latency_threshold = 0.25 # latency that will trigger connection throttling
 
-    def __init__(self, remote_address, event_handler):
+    def __init__(self, remote_address:tuple, event_handler):
         self.remote_address = remote_address
         self.event_handler = event_handler
         self.local_sequence = sqn(0)
@@ -156,22 +194,13 @@ class Connection:
         self._pending_acks = {}
         self._last_recv = time.time()
 
-    async def _recv(self, received_package:Package):
-        '''
-        Updates `remote_sequence` and `ack_bitfield` based on a received package, resolves package loss
-        and puts the received events in the queue of incoming events.
-        
-        ### Raises
-         - **DuplicateSequenceError**: if a package with the same sequence has already been received
-        '''
-        self._last_recv = time.time()
-        self.set_status('Connected')
+    def _update_remote_info(self, received_sequence):
         if self.remote_sequence == 0:
-            self.remote_sequence = received_package.sequence
+            self.remote_sequence = received_sequence
             return
-        sequence_diff = self.remote_sequence - received_package.sequence
+        sequence_diff = self.remote_sequence - received_sequence
         if sequence_diff < 0:
-            self.remote_sequence = received_package.sequence
+            self.remote_sequence = received_sequence
             if sequence_diff == -1:
                 self.ack_bitfield = '1' + self.ack_bitfield[:-1]
             else:
@@ -183,13 +212,23 @@ class Connection:
                 raise DuplicateSequenceError
             else:
                 self.ack_bitfield = self.ack_bitfield[:sequence_diff-1] + '1' + self.ack_bitfield[sequence_diff:]
+
+    async def _recv(self, received_package:Package):
+        '''
+        Updates `remote_sequence` and `ack_bitfield` based on a received package, resolves package loss
+        and puts the received events in the queue of incoming events.
+        
+        ### Raises
+         - **DuplicateSequenceError**: if a package with the same sequence has already been received
+        '''
+        self._last_recv = time.time()
+        self._set_status('Connected')
+        self._update_remote_info(received_package.sequence)
         # resolve pending acks for sent packages
         for pending_sequence in list(self._pending_acks):
             sequence_diff = received_package.ack - pending_sequence
-            if sequence_diff < 0:
-                continue
-            elif sequence_diff == 0 or (sequence_diff < 33 and received_package.ack_bitfield[sequence_diff-1] == '1'):
-                self.update_latency(time.time() - self._pending_acks[pending_sequence])
+            if sequence_diff == 0 or (sequence_diff < 33 and received_package.ack_bitfield[sequence_diff-1] == '1'):
+                self._update_latency(time.time() - self._pending_acks[pending_sequence])
                 del self._pending_acks[pending_sequence]
             elif time.time() - self._pending_acks[pending_sequence] > Package.timeout:
                 del self._pending_acks[pending_sequence]
@@ -200,11 +239,14 @@ class Connection:
     def dispatch_event(self, event):
         self._outgoing_event_queue.put(event)
 
+    async def _handle_next_event(self):
+        event = await self._incoming_event_queue.get()
+        self.event_handler.handle_blocking(event)
+        await self._incoming_event_queue.task_done()
+
     async def _event_loop(self):
         while True:
-            event = await self._incoming_event_queue.get()
-            self.event_handler.handle_blocking(event)
-            await self._incoming_event_queue.task_done()
+            await self._handle_next_event()
 
     async def _send_loop(self, sock):
         '''
@@ -215,7 +257,7 @@ class Connection:
         while True:
             t0 = time.time()
             if t0 - self._last_recv > self.timeout:
-                self.set_status('Disconnected')
+                self._set_status('Disconnected')
                 #await self._outgoing_event_queue.put('shutdown') # should be a proper timeout event
                 break
             await self._send_next_package(sock)
@@ -232,10 +274,10 @@ class Connection:
         await sock.sendto(package.to_datagram(), self.remote_address)
         self._pending_acks[package.sequence] = time.time()
 
-    def set_status(self, status:str):
+    def _set_status(self, status:str):
         self.status = ConnectionStatus.get(status)
 
-    def update_latency(self, rtt:int):
+    def _update_latency(self, rtt:int):
         # smoothed moving average to filter out network jitter
         self.latency += 0.1 * (rtt - self.latency)
 
@@ -308,7 +350,6 @@ class ServerConnection(Connection):
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind((hostname, port))
             connection_tasks = curio.TaskGroup()
-            #send_loop_tasks = [] # should be replaced by curio.TaskGroup()
             while True:
                 data, client_address = await sock.recvfrom(Package.max_size)
                 try:
@@ -316,8 +357,7 @@ class ServerConnection(Connection):
                     # create new connection if client is unknown
                     if not client_address in connections:
                         new_connection = cls(client_address, event_handler)
-                        new_connection.set_status('Connected')
-                        #send_loop_tasks.append(await curio.spawn(new_connection._send_loop, sock))
+                        new_connection._set_status('Connected')
                         await connection_tasks.spawn(new_connection._send_loop, sock)
                         await connection_tasks.spawn(new_connection._event_loop)
                         connections[client_address] = new_connection
@@ -332,5 +372,3 @@ class ServerConnection(Connection):
                 except UnicodeDecodeError:
                     pass
             await connection_tasks.cancel_remaining()
-            #for task in send_loop_tasks:
-            #    await task.cancel()

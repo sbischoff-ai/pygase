@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
+from inspect import signature
+
 import umsgpack
-#import ifaddr
+import ifaddr
 
 class Sendable:
     '''
@@ -21,9 +23,9 @@ class Sendable:
         Returns a copy of the object that was packed into byte format.
         '''
         try:
-            received_sendable = object.__new__(type('', (), {}))
+            arg_num = len(signature(cls).parameters)
+            received_sendable = cls(*([None]*arg_num))
             received_sendable.__dict__ = umsgpack.unpackb(bytepack)
-            received_sendable.__class__ = cls
             return received_sendable
         except (umsgpack.InsufficientDataException, KeyError, TypeError):
             raise TypeError('Bytes could no be parsed into ' + cls.__name__ + '.')
@@ -64,6 +66,10 @@ class sqn(int):
         cls._bytesize = bytesize
         cls._max_sequence = int('1' * (bytesize * 8), 2)
 
+    @classmethod
+    def get_max_sequence(cls):
+        return cls(cls._max_sequence)
+
     def __new__(cls, value, *args, **kwargs):
         if value > cls._max_sequence:
             raise ValueError('value exceeds maximum sequence number')
@@ -98,7 +104,7 @@ class sqn(int):
     @classmethod
     def from_bytes(cls, b):
         return cls(super().from_bytes(b, 'big'))
-'''
+
 def get_available_ip_addresses():
     """
     Returns a list of all available IP addresses the server can be bound to.
@@ -111,4 +117,3 @@ def get_available_ip_addresses():
                 # only local IPv4 addresses
                 addresses.append(ip_addr.ip)
     return addresses
-'''

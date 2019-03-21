@@ -4,7 +4,7 @@ from pygase.utils import Sendable, NamedEnum
 
 class Event(Sendable):
 
-    def __init__(self, event_type:str, handler_args:tuple=()):
+    def __init__(self, event_type:str, handler_args:list=[]):
         self.type = event_type
         self.data = handler_args
 

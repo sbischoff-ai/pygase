@@ -5,8 +5,7 @@ from pygase.utils import Sendable, NamedEnum, sqn
 # unique 4-byte token to mark GameState entries for deletion
 TO_DELETE = bytes.fromhex('d281e5ba')
 
-class GameStatus(NamedEnum):
-    pass
+class GameStatus(NamedEnum): pass
 GameStatus.register('Paused')
 GameStatus.register('Active')
 
