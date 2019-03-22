@@ -27,6 +27,18 @@ class Client:
         thread.start()
         return thread
 
+    def access_game_state(self):
+        '''
+        Returns a context manager to access the shared game state in a thread-safe way.
+
+        Example:
+        ```python
+        with client.access_game_state() as game_state:
+            do_stuff(game_state)
+        ```
+        '''
+        return self.connection.game_state_context
+
     def dispatch_event(self, event_type:str, handler_args:list, retries:int=0, ack_callback=None):
         event = Event(event_type, handler_args)
         timeout_callback = None

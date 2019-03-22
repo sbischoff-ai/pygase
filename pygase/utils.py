@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from threading import Lock
 from inspect import signature
 
 import umsgpack
@@ -18,13 +19,12 @@ class Sendable:
         return umsgpack.packb(self.__dict__, force_float_precision='single')
 
     @classmethod
-    def from_bytes(cls, bytepack: bytes):
+    def from_bytes(cls, bytepack:bytes):
         '''
         Returns a copy of the object that was packed into byte format.
         '''
         try:
-            arg_num = len(signature(cls).parameters)
-            received_sendable = cls(*([None]*arg_num))
+            received_sendable = object.__new__(cls)
             received_sendable.__dict__ = umsgpack.unpackb(bytepack)
             return received_sendable
         except (umsgpack.InsufficientDataException, KeyError, TypeError):
@@ -71,7 +71,9 @@ class sqn(int):
         return cls(cls._max_sequence)
 
     def __new__(cls, value, *args, **kwargs):
-        if value > cls._max_sequence:
+        if value is None:
+            value = 0
+        elif value > cls._max_sequence:
             raise ValueError('value exceeds maximum sequence number')
         elif value < 0:
             raise ValueError('sequence numbers must not be negative')
@@ -104,6 +106,19 @@ class sqn(int):
     @classmethod
     def from_bytes(cls, b):
         return cls(super().from_bytes(b, 'big'))
+
+class LockedRessource:
+
+    def __init__(self, ressource):
+        self.lock = Lock()
+        self.ressource = ressource
+
+    def __enter__(self):
+        self.lock.acquire()
+        return self.ressource
+
+    def __exit__(self, type, value, traceback):
+        self.lock.release()
 
 def get_available_ip_addresses():
     """

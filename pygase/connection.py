@@ -5,8 +5,9 @@ import time
 import curio
 from curio import socket
 
-from pygase.utils import Sendable, NamedEnum, sqn
+from pygase.utils import Sendable, NamedEnum, sqn, LockedRessource
 from pygase.event import Event
+from pygase.gamestate import GameState, GameStateUpdate
 
 class ProtocolIDMismatchError(ValueError): pass
 
@@ -91,20 +92,29 @@ class Package:
         '''
         if self._datagram is not None:
             return self._datagram
-        datagram = bytearray(self._protocol_id)
-        datagram.extend(self.sequence.to_bytes())
-        datagram.extend(self.ack.to_bytes())
-        datagram.extend(int(self.ack_bitfield, 2).to_bytes(4, 'big'))
+        datagram = self._create_header()
         # The header makes up the first 12 bytes of the package
-        for event in self._events:
-            bytepack = event.to_bytes()
-            datagram.extend(len(bytepack).to_bytes(2, 'big'))
-            datagram.extend(bytepack)
+        datagram.extend(self._create_event_block())
         datagram = bytes(datagram)
         if len(datagram) > self.max_size:
             raise OverflowError('package exceeds the maximum size of ' + str(self.max_size) + ' bytes')
         self._datagram = bytes(datagram)
         return self._datagram
+
+    def _create_header(self):
+        header = bytearray(self._protocol_id)
+        header.extend(self.sequence.to_bytes())
+        header.extend(self.ack.to_bytes())
+        header.extend(int(self.ack_bitfield, 2).to_bytes(4, 'big'))
+        return header
+
+    def _create_event_block(self):
+        event_block = bytearray()
+        for event in self._events:
+            bytepack = event.to_bytes()
+            event_block.extend(len(bytepack).to_bytes(2, 'big'))
+            event_block.extend(bytepack)
+        return event_block
 
     @classmethod
     def from_datagram(cls, datagram:bytes):
@@ -118,20 +128,37 @@ class Package:
         ### Raises
          - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
         '''
+        header_args, payload = cls._read_out_header(datagram)
+        events = cls._read_out_event_block(payload)
+        result = Package(**header_args, events=events)
+        result._datagram = datagram
+        return result
+
+    @classmethod
+    def _read_out_header(cls, datagram):
         if datagram[:4] != cls._protocol_id:
             raise ProtocolIDMismatchError
         sequence = sqn.from_bytes(datagram[4:6])
         ack = sqn.from_bytes(datagram[6:8])
         ack_bitfield = bin(int.from_bytes(datagram[8:12], 'big'))[2:].zfill(32)
         payload = datagram[12:]
+        return (
+            {
+                'sequence': sequence,
+                'ack': ack,
+                'ack_bitfield': ack_bitfield
+            },
+            payload
+        )
+
+    @staticmethod
+    def _read_out_event_block(event_block):
         events = []
-        while len(payload) > 0:
-            bytesize = int.from_bytes(payload[:2], 'big')
-            events.append(Event.from_bytes(payload[2:bytesize+2]))
-            payload = payload[bytesize+2:]
-        result = Package(sequence, ack, ack_bitfield, events)
-        result._datagram = datagram
-        return result
+        while len(event_block) > 0:
+            bytesize = int.from_bytes(event_block[:2], 'big')
+            events.append(Event.from_bytes(event_block[2:bytesize+2]))
+            event_block = event_block[bytesize+2:]
+        return events
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -140,6 +167,99 @@ class Package:
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+class ClientPackage(Package):
+    def __init__(self, sequence:int, ack:int, ack_bitfield:str, time_order:int, events:list=None):
+        super().__init__(sequence, ack, ack_bitfield, events)
+        self.time_order = sqn(time_order)
+
+    def to_datagram(self):
+        '''
+        ### Returns
+        *bytes*: compact bytestring representing the package, which can be sent via a datagram socket
+        
+        ### Raises
+         - **OverflowError**: if the resulting datagram would exceed **max_size**
+        '''
+        if self._datagram is not None:
+            return self._datagram
+        datagram = self._create_header()
+        # The header makes up the first 12 bytes of the package
+        datagram.extend(self.time_order.to_bytes())
+        datagram.extend(self._create_event_block())
+        datagram = bytes(datagram)
+        if len(datagram) > self.max_size:
+            raise OverflowError('package exceeds the maximum size of ' + str(self.max_size) + ' bytes')
+        self._datagram = bytes(datagram)
+        return self._datagram
+
+    @classmethod
+    def from_datagram(cls, datagram):
+        '''
+        ### Arguments
+         - **datagram** *bytes*: bytestring data, typically received via a socket
+        
+        ### Returns
+        *Package*: the package from which the datagram has been created using `to_datagram()`
+
+        ### Raises
+         - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
+        '''
+        header_args, payload = cls._read_out_header(datagram)
+        time_order = sqn.from_bytes(payload[:2])
+        payload = payload[2:]
+        events = cls._read_out_event_block(payload)
+        result = ClientPackage(**header_args, time_order=time_order, events=events)
+        result._datagram = datagram
+        return result
+
+class ServerPackage(Package):
+    def __init__(self, sequence:int, ack:int, ack_bitfield:str, game_state_update:GameStateUpdate, events:list=None):
+        super().__init__(sequence, ack, ack_bitfield, events)
+        self.game_state_update = game_state_update
+
+    def to_datagram(self):
+        '''
+        ### Returns
+        *bytes*: compact bytestring representing the package, which can be sent via a datagram socket
+        
+        ### Raises
+         - **OverflowError**: if the resulting datagram would exceed **max_size**
+        '''
+        if self._datagram is not None:
+            return self._datagram
+        datagram = self._create_header()
+        # The header makes up the first 12 bytes of the package
+        state_update_bytepack = self.game_state_update.to_bytes()
+        datagram.extend(len(state_update_bytepack).to_bytes(2, 'big'))
+        datagram.extend(state_update_bytepack)
+        datagram.extend(self._create_event_block())
+        datagram = bytes(datagram)
+        if len(datagram) > self.max_size:
+            raise OverflowError('package exceeds the maximum size of ' + str(self.max_size) + ' bytes')
+        self._datagram = bytes(datagram)
+        return self._datagram
+
+    @classmethod
+    def from_datagram(cls, datagram):
+        '''
+        ### Arguments
+         - **datagram** *bytes*: bytestring data, typically received via a socket
+        
+        ### Returns
+        *Package*: the package from which the datagram has been created using `to_datagram()`
+
+        ### Raises
+         - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
+        '''
+        header_args, payload = cls._read_out_header(datagram)
+        state_update_bytesize = int.from_bytes(payload[:2], 'big')
+        game_state_update = GameStateUpdate.from_bytes(payload[2:state_update_bytesize+2])
+        payload = payload[state_update_bytesize+2:]
+        events = cls._read_out_event_block(payload)
+        result = ServerPackage(**header_args, game_state_update=game_state_update, events=events)
+        result._datagram = datagram
+        return result
 
 class ConnectionStatus(NamedEnum): pass
 ConnectionStatus.register('Disconnected')
@@ -286,9 +406,12 @@ class Connection:
             await curio.sleep(max([self.package_interval - time.time() + t0, 0]))
         await congestion_avoidance_task.cancel()
 
+    def _create_next_package(self):
+        return Package(self.local_sequence, self.remote_sequence, self.ack_bitfield)
+
     async def _send_next_package(self, sock):
         self.local_sequence += 1
-        package = Package(self.local_sequence, self.remote_sequence, self.ack_bitfield)
+        package = self._create_next_package()
         while len(package.events) < 5 and not self._outgoing_event_queue.empty():
             event, callback_sequence = await self._outgoing_event_queue.get()
             if callback_sequence != 0:
@@ -343,9 +466,14 @@ class ClientConnection(Connection):
     def __init__(self, remote_address, event_handler):
         super().__init__(remote_address, event_handler)
         self._command_queue = curio.UniversalQueue()
+        self.game_state_context = LockedRessource(GameState())
 
     def shutdown(self):
         self._command_queue.put('shutdown')
+
+    def _create_next_package(self):
+        time_order = self.game_state_context.ressource.time_order
+        return ClientPackage(self.local_sequence, self.remote_sequence, self.ack_bitfield, time_order)
 
     async def loop(self):
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -363,27 +491,49 @@ class ClientConnection(Connection):
             await send_loop_task.cancel()
             await event_loop_task.cancel()
 
+    async def _recv(self, package):
+        await super()._recv(package)
+        async with curio.abide(self.game_state_context.lock):
+            self.game_state_context.ressource += package.game_state_update
+
     async def _client_recv_loop(self, sock):
+        while self.local_sequence == 0:
+            await curio.sleep(0)
         while True:
-            # somehow await the first sendto call here
-            data = await sock.recv(Package.max_size)
-            package = Package.from_datagram(data)
+            data = await sock.recv(ServerPackage.max_size)
+            package = ServerPackage.from_datagram(data)
             await self._recv(package)
 
 class ServerConnection(Connection):
 
+    def __init__(self, remote_address:tuple, event_handler, game_state_store, last_client_time_order:sqn):
+        super().__init__(remote_address, event_handler)
+        self.game_state_store = game_state_store
+        self.last_client_time_order = last_client_time_order
+
+    def _create_next_package(self):
+        update_cache = self.game_state_store.get_update_cache()
+        # Respond by sending the sum of all updates since the client's time-order point.
+        update_base = GameStateUpdate(self.last_client_time_order)
+        update = sum((upd for upd in update_cache if upd > update_base), update_base)
+        return ServerPackage(self.local_sequence, self.remote_sequence, self.ack_bitfield, update)
+
+    async def _recv(self, package:ClientPackage):
+        await super()._recv(package)
+        self.last_client_time_order = package.time_order
+
     @classmethod
-    async def loop(cls, hostname:str, port:int, connections:dict, event_handler):
+    async def loop(cls, hostname:str, port:int, connections:dict, event_handler, game_state_update_cache:list):
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind((hostname, port))
             connection_tasks = curio.TaskGroup()
             while True:
                 data, client_address = await sock.recvfrom(Package.max_size)
                 try:
-                    package = Package.from_datagram(data)
+                    package = ClientPackage.from_datagram(data)
                     # create new connection if client is unknown
                     if not client_address in connections:
-                        new_connection = cls(client_address, event_handler)
+                        new_connection = cls(client_address, event_handler, game_state_update_cache, package.time_order)
                         new_connection._set_status('Connected')
                         await connection_tasks.spawn(new_connection._send_loop, sock)
                         await connection_tasks.spawn(new_connection._event_loop)

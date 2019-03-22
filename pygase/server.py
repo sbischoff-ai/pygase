@@ -4,24 +4,43 @@ import threading
 import curio
 
 from pygase.connection import ServerConnection
+from pygase.gamestate import GameStateStore, GameStateMachine
 from pygase.event import UniversalEventHandler, Event
 
 class Server:
     
-    def __init__(self):
+    def __init__(self, game_state_store:GameStateStore=GameStateStore()):
         self.connections = {}
         self._universal_event_handler = UniversalEventHandler()
+        self.game_state_store = game_state_store
 
     async def run_async(self, port:int=0, hostname:str='localhost'):
-        await ServerConnection.loop(hostname, port, self.connections, self._universal_event_handler)
+        await ServerConnection.loop(
+            hostname, port,
+            self.connections,
+            self._universal_event_handler,
+            self.game_state_store
+        )
 
     def run_blocking(self, port:int=0, hostname:str='localhost'):
-        curio.run(ServerConnection.loop, hostname, port, self.connections, self._universal_event_handler)
+        curio.run(
+            ServerConnection.loop,
+            hostname, port,
+            self.connections,
+            self._universal_event_handler,
+            self.game_state_store
+        )
 
     def run_in_thread(self, port:int=0, hostname:str='localhost'):
         thread = threading.Thread(
             target=curio.run,
-            args=(ServerConnection.loop, hostname, port, self.connections, self._universal_event_handler)
+            args=(
+                ServerConnection.loop,
+                hostname, port,
+                self.connections,
+                self._universal_event_handler,
+                self.game_state_store
+            )
         )
         thread.start()
         return thread

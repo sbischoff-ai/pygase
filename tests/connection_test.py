@@ -7,7 +7,8 @@ from curio import socket
 
 from pygase.utils import sqn
 from pygase.event import Event
-from pygase.connection import Package, Connection, DuplicateSequenceError, ProtocolIDMismatchError
+from pygase.gamestate import GameStateUpdate
+from pygase.connection import Package, ClientPackage, ServerPackage, Connection, DuplicateSequenceError, ProtocolIDMismatchError
 
 class TestPackage:
 
@@ -40,6 +41,22 @@ class TestPackage:
         with pytest.raises(OverflowError):
             package.get_bytesize()
             package.add_event(Event('BIG', [bytes(2030)]))
+
+class TestClientPackage:
+
+    def test_bytepacking(self):
+        package = ClientPackage(4, 5, '10'*16, 1, [Event('TEST', ['Foo', 'Bar'])])
+        datagram = package.to_datagram()
+        unpacked_package = ClientPackage.from_datagram(datagram)
+        assert package == unpacked_package
+
+class TestServerPackage:
+
+    def test_bytepacking(self):
+        package = ServerPackage(4, 5, '10'*16, GameStateUpdate(2), [Event('TEST', ['Foo', 'Bar'])])
+        datagram = package.to_datagram()
+        unpacked_package = ServerPackage.from_datagram(datagram)
+        assert package == unpacked_package
 
 class TestConnection:
 

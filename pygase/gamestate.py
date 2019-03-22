@@ -5,6 +5,23 @@ from pygase.utils import Sendable, NamedEnum, sqn
 # unique 4-byte token to mark GameState entries for deletion
 TO_DELETE = bytes.fromhex('d281e5ba')
 
+class GameStateMachine:
+    
+    def update(self, game_state):
+        raise NotImplementedError()
+
+class GameStateStore:
+
+    def __init__(self):
+        self.game_state = GameState()
+        self.game_state_update_cache = [GameStateUpdate(0)]
+    
+    def get_update_cache(self):
+        return self.game_state_update_cache.copy()
+
+    def get_game_state(self):
+        return self.game_state
+
 class GameStatus(NamedEnum): pass
 GameStatus.register('Paused')
 GameStatus.register('Active')
@@ -12,32 +29,22 @@ GameStatus.register('Active')
 class GameState(Sendable):
     '''
     Contains game state information that is required to be known both by the server and the client.
-    Since it is a *Sendable*, it can only contain basic python types as attributes.
+    Since it is a *Sendable*, it can only contain attributes of type `str`, `bytes`, `sqn`, `int`, `float`,
+    `bool` as well as `list`s or `tuple`s of such.
 
     *time_order* should be in alignment with the servers current update counter.
     '''
 
-    def __init__(self, time_order=0, game_status=GameStatus.get('Paused')):
+    def __init__(self, time_order=0, game_status=GameStatus.get('Paused'), **kwargs):
+        self.__dict__ = kwargs
         self.game_status = game_status
         self.time_order = sqn(time_order)
-        self.players = {}
 
     def is_paused(self):
         '''
         Returns *True* if game status is *Paused*.
         '''
         return self.game_status == GameStatus.get('Paused')
-
-    # This should be eliminated, as soon as concurrency has been improved with curio
-    def iter(self, dict_attr: str):
-        '''
-        Returns a representation of the *GameState* attribute *dict_attr* that is safe to
-        iterate through, while the GameState is concurrently updated. Returns keys and
-        values in a tuple.
-
-        Example: Iterate through players with `for player_id, player in game_state.iter('players')`.
-        '''
-        return getattr(self, dict_attr).copy().items()
 
     '''
     Overrides of 'object' member functions
@@ -66,9 +73,15 @@ class GameStateUpdate(Sendable):
     also heavier update (meaning it will contain more data).
     '''
 
-    def __init__(self, time_order: int, **kwargs):
+    def __init__(self, time_order:int, **kwargs):
         self.__dict__ = kwargs
         self.time_order = sqn(time_order)
+
+    @classmethod
+    def from_bytes(cls, bytepack:bytes):
+        update = super().from_bytes(bytepack)
+        update.time_order = sqn(update.time_order) # pylint: disable=no-member
+        return update
 
     # Adding to another update should return an updated update
     def __add__(self, other):

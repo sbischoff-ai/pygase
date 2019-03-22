@@ -5,6 +5,12 @@ from pygase.gamestate import GameState, GameStateUpdate, GameStatus, TO_DELETE
 
 class TestGameState:
 
+    def test_bytepacking(self):
+        game_state = GameState()
+        bytepack = game_state.to_bytes()
+        unpacked_game_state = GameState.from_bytes(bytepack)
+        assert game_state == unpacked_game_state
+
     def test_game_state_instantiation(self):
         game_state = GameState()
         assert game_state.time_order == 0
@@ -15,6 +21,12 @@ class TestGameState:
         assert game_state == paused_game_state
 
 class TestGameStateUpdate:
+
+    def test_bytepacking(self):
+        update = GameStateUpdate(5)
+        bytepack = update.to_bytes()
+        unpacked_update = GameStateUpdate.from_bytes(bytepack)
+        assert update == unpacked_update
 
     def test_update_arithmetic(self):
         game_state = GameState(
