@@ -8,7 +8,8 @@ from curio import socket
 from pygase.utils import sqn
 from pygase.event import Event
 from pygase.gamestate import GameStateUpdate
-from pygase.connection import Package, ClientPackage, ServerPackage, Connection, DuplicateSequenceError, ProtocolIDMismatchError
+from pygase.connection import Package, ClientPackage, ServerPackage, \
+    Connection, DuplicateSequenceError, ProtocolIDMismatchError
 
 class TestPackage:
 
@@ -333,4 +334,3 @@ class TestConnection:
             frozen_time.tick()
             curio.run(connection._recv, Package(3,1,'0'*32))
             assert callback.count == 1
-            

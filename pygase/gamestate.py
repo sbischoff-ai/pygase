@@ -1,26 +1,77 @@
 # -*- coding: utf-8 -*-
 
+import time
+
 from pygase.utils import Sendable, NamedEnum, sqn
 
 # unique 4-byte token to mark GameState entries for deletion
 TO_DELETE = bytes.fromhex('d281e5ba')
 
-class GameStateMachine:
-    
-    def update(self, game_state):
-        raise NotImplementedError()
-
 class GameStateStore:
 
+    _update_cache_size = 100
+
     def __init__(self):
-        self.game_state = GameState()
-        self.game_state_update_cache = [GameStateUpdate(0)]
-    
+        self._game_state = GameState()
+        self._game_state_update_cache = [GameStateUpdate(0)]
+
     def get_update_cache(self):
-        return self.game_state_update_cache.copy()
+        return self._game_state_update_cache.copy()
 
     def get_game_state(self):
-        return self.game_state
+        return self._game_state
+
+    def push_update(self, update:GameStateUpdate):
+        self._game_state_update_cache.append(update)
+        if len(self._game_state_update_cache) > self._update_cache_size:
+            del self._game_state_update_cache[0]
+        if update > self._game_state:
+            self._game_state += update
+
+class GameStateMachine:
+    '''
+    This class is meant as a base class from which you inherit and implement the `update` method.
+    '''
+    def __init__(self):
+        self.game_time = 0
+        self._stop = True
+
+    def run_game_loop(self, game_state_store, interval=0.02):
+        if game_state_store.get_game_state().game_status == GameStatus.get('Paused'):
+            game_state_store.push_update(
+                GameStateUpdate(
+                    game_state_store.get_game_state().time_order + 1,
+                    game_status=GameStatus.get('Active')
+                )
+            )
+        self._stop = False
+        dt = interval
+        while not self._stop:
+            t0 = time.time()
+            game_state_store.push_update(
+                self.update(game_state_store.get_game_state(), dt)
+            )
+            dt = max(interval, time.time()-t0)
+            if dt < interval:
+                time.sleep(interval-dt)
+                dt = interval
+            self.game_time += dt
+        if game_state_store.get_game_state().game_status == GameStatus.get('Active'):
+            game_state_store.push_update(
+                GameStateUpdate(
+                    game_state_store.get_game_state().time_order + 1,
+                    game_status=GameStatus.get('Paused')
+                )
+            )
+
+    def stop(self):
+        self._stop = True
+
+    def update(self, game_state, dt):
+        '''
+        This method should be implemented to return a GameStateUpdate.
+        '''
+        raise NotImplementedError()
 
 class GameStatus(NamedEnum): pass
 GameStatus.register('Paused')
