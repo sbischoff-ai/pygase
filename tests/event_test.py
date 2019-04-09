@@ -2,7 +2,7 @@
 
 from pygase.event import Event, UniversalEventHandler
 
-class TestGameState:
+class TestEvent:
 
     def test_bytepacking(self):
         event1 = Event('TEST', [1,2,3])

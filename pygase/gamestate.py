@@ -1,77 +1,16 @@
 # -*- coding: utf-8 -*-
 
 import time
+import threading
+
+import curio
+from curio.meta import awaitable
 
 from pygase.utils import Sendable, NamedEnum, sqn
+from pygase.event import UniversalEventHandler
 
 # unique 4-byte token to mark GameState entries for deletion
 TO_DELETE = bytes.fromhex('d281e5ba')
-
-class GameStateStore:
-
-    _update_cache_size = 100
-
-    def __init__(self):
-        self._game_state = GameState()
-        self._game_state_update_cache = [GameStateUpdate(0)]
-
-    def get_update_cache(self):
-        return self._game_state_update_cache.copy()
-
-    def get_game_state(self):
-        return self._game_state
-
-    def push_update(self, update:GameStateUpdate):
-        self._game_state_update_cache.append(update)
-        if len(self._game_state_update_cache) > self._update_cache_size:
-            del self._game_state_update_cache[0]
-        if update > self._game_state:
-            self._game_state += update
-
-class GameStateMachine:
-    '''
-    This class is meant as a base class from which you inherit and implement the `update` method.
-    '''
-    def __init__(self):
-        self.game_time = 0
-        self._stop = True
-
-    def run_game_loop(self, game_state_store, interval=0.02):
-        if game_state_store.get_game_state().game_status == GameStatus.get('Paused'):
-            game_state_store.push_update(
-                GameStateUpdate(
-                    game_state_store.get_game_state().time_order + 1,
-                    game_status=GameStatus.get('Active')
-                )
-            )
-        self._stop = False
-        dt = interval
-        while not self._stop:
-            t0 = time.time()
-            game_state_store.push_update(
-                self.update(game_state_store.get_game_state(), dt)
-            )
-            dt = max(interval, time.time()-t0)
-            if dt < interval:
-                time.sleep(interval-dt)
-                dt = interval
-            self.game_time += dt
-        if game_state_store.get_game_state().game_status == GameStatus.get('Active'):
-            game_state_store.push_update(
-                GameStateUpdate(
-                    game_state_store.get_game_state().time_order + 1,
-                    game_status=GameStatus.get('Paused')
-                )
-            )
-
-    def stop(self):
-        self._stop = True
-
-    def update(self, game_state, dt):
-        '''
-        This method should be implemented to return a GameStateUpdate.
-        '''
-        raise NotImplementedError()
 
 class GameStatus(NamedEnum): pass
 GameStatus.register('Paused')
@@ -172,3 +111,110 @@ def _recursive_update(d: dict, u: dict, delete=False):
             _recursive_update(d[k], v, delete=delete)
         else:
             d[k] = v
+
+class GameStateStore:
+
+    _update_cache_size = 100
+
+    def __init__(self, initial_game_state:GameState=GameState()):
+        self._game_state = initial_game_state
+        self._game_state_update_cache = [GameStateUpdate(0)]
+
+    def get_update_cache(self):
+        return self._game_state_update_cache.copy()
+
+    def get_game_state(self):
+        return self._game_state
+
+    def push_update(self, update:GameStateUpdate):
+        self._game_state_update_cache.append(update)
+        if len(self._game_state_update_cache) > self._update_cache_size:
+            del self._game_state_update_cache[0]
+        if update > self._game_state:
+            self._game_state += update
+
+class GameStateMachine:
+    '''
+    This class is meant as a base class from which you inherit and implement the `update` method.
+    '''
+    def __init__(self, game_state_store:GameStateStore):
+        self.game_time = 0
+        self._event_queue = curio.UniversalQueue()
+        self._universal_event_handler = UniversalEventHandler()
+        self._game_state_store = game_state_store
+        self._game_loop_is_running = False
+
+    def _push_event(self, update_dict:dict):
+        self._event_queue.put(update_dict)
+
+    @awaitable(_push_event)
+    async def _push_event(self, update_dict:dict): #pylint: disable=function-redefined
+        await self._event_queue.put(update_dict)
+
+    def push_event_handler(self, event_type:str, handler_func):
+        '''
+        handler_func gets passed the keyword argument `game_state` along with those attached
+        to the event and is expected to return an update dict.
+        '''
+        self._universal_event_handler.push_event_handler(event_type, handler_func)
+
+    def run_game_loop(self, interval:float=0.02):
+        curio.run(self.run_game_loop, interval)
+
+    @awaitable(run_game_loop)
+    async def run_game_loop(self, interval:float=0.02): #pylint: disable=function-redefined
+        if self._game_state_store.get_game_state().game_status == GameStatus.get('Paused'):
+            self._game_state_store.push_update(
+                GameStateUpdate(
+                    self._game_state_store.get_game_state().time_order + 1,
+                    game_status=GameStatus.get('Active')
+                )
+            )
+        game_state = self._game_state_store.get_game_state()
+        dt = interval
+        self._game_loop_is_running = True
+        while game_state.game_status == GameStatus.get('Active'):
+            t0 = time.time()
+            update_dict = self.time_step(game_state, dt)
+            while not self._event_queue.empty():
+                event = await self._event_queue.get()
+                event_update = self._universal_event_handler.handle_blocking(event, game_state=game_state, dt=dt)
+                update_dict.update(event_update)
+                if time.time() - t0 > 0.95*interval:
+                    break
+            self._game_state_store.push_update(GameStateUpdate(game_state.time_order + 1, **update_dict))
+            game_state = self._game_state_store.get_game_state()
+            dt = max(interval, time.time()-t0)
+            await curio.sleep(max(0, interval-dt))
+            self.game_time += dt
+        self._game_loop_is_running = False
+
+    def run_game_loop_in_thread(self, interval:float=0.02):
+        thread = threading.Thread(target=self.run_game_loop, args=(interval,))
+        thread.start()
+        return thread
+
+    def stop(self, timeout:float=1.0):
+        return curio.run(self.stop, timeout)
+
+    @awaitable(stop)
+    async def stop(self, timeout:float=1.0): # pylint: disable=function-redefined
+        if self._game_state_store.get_game_state().game_status == GameStatus.get('Active'):
+            self._game_state_store.push_update(
+                GameStateUpdate(
+                    self._game_state_store.get_game_state().time_order + 1,
+                    game_status=GameStatus.get('Paused')
+                )
+            )
+        t0 = time.time()
+        while self._game_loop_is_running:
+            if time.time() - t0 > timeout:
+                break
+            await curio.sleep(0)
+        return not self._game_loop_is_running
+
+    def time_step(self, game_state:GameState, dt):
+        '''
+        This method should be implemented to return a dict with all the updated state attributes.
+        '''
+        raise NotImplementedError()

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import threading
+import curio
+
+from helpers import assert_timeout
 
 from pygase.server import Server
 from pygase.connection import ClientPackage
@@ -10,17 +12,16 @@ from pygase.event import UniversalEventHandler
 class TestServer:
 
     def test_instantiation(self):
-        server = Server()
+        server = Server(GameStateStore())
         assert server.game_state_store.__class__ == GameStateStore
         assert server._universal_event_handler.__class__ == UniversalEventHandler
 
-'''
-THREADING PROBLEM WITH PYTEST?
-    def test_run_in_thread(self):
-        server = Server()
-        thread = server.run_in_thread()
-        assert thread.is_alive()
-        server.shutdown()
-        thread.join()
-        assert not thread.is_alive()
-'''
+    def test_run_async(self):
+        server = Server(GameStateStore())
+        async def test_task():
+            await curio.spawn(server.run, 1234)
+            await assert_timeout(1, lambda: server.hostname == 'localhost')
+            assert server._port == 1234
+            await server.shutdown()
+            return True
+        assert curio.run(test_task)

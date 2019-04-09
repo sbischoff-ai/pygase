@@ -4,6 +4,7 @@ import time
 
 import curio
 from curio import socket
+from curio.meta import awaitable
 
 from pygase.utils import Sendable, NamedEnum, sqn, LockedRessource
 from pygase.event import Event
@@ -299,7 +300,7 @@ class Connection:
     } # maps connection.quality to time between sent packages in seconds
     _latency_threshold = 0.25 # latency that will trigger connection throttling
 
-    def __init__(self, remote_address:tuple, event_handler):
+    def __init__(self, remote_address:tuple, event_handler, event_wire=None):
         self.remote_address = remote_address
         self.event_handler = event_handler
         self.local_sequence = sqn(0)
@@ -316,6 +317,7 @@ class Connection:
         self._events_with_callbacks = {}
         self._event_callbacks = {}
         self._last_recv = time.time()
+        self._event_wire = event_wire
 
     def _update_remote_info(self, received_sequence):
         if self.remote_sequence == 0:
@@ -350,7 +352,7 @@ class Connection:
         # resolve pending acks for sent packages (NEEDS REFACTORING)
         for pending_sequence in list(self._pending_acks):
             sequence_diff = received_package.ack - pending_sequence
-            if sequence_diff == 0 or (sequence_diff < 33 and received_package.ack_bitfield[sequence_diff-1] == '1'):
+            if sequence_diff == 0 or (0 < sequence_diff < 32 and received_package.ack_bitfield[sequence_diff-1] == '1'):
                 self._update_latency(time.time() - self._pending_acks[pending_sequence])
                 if pending_sequence in self._events_with_callbacks:
                     for event_sequence in self._events_with_callbacks[pending_sequence]:
@@ -369,6 +371,8 @@ class Connection:
                 del self._pending_acks[pending_sequence]
         for event in received_package.events:
             await self._incoming_event_queue.put(event)
+            if self._event_wire is not None:
+                await self._event_wire._push_event(event)
 
     def dispatch_event(self, event:Event, ack_callback=None, timeout_callback=None):
         callback_sequence = 0
@@ -383,7 +387,8 @@ class Connection:
 
     async def _handle_next_event(self):
         event = await self._incoming_event_queue.get()
-        self.event_handler.handle_blocking(event)
+        if self.event_handler.has_type(event.type):
+            self.event_handler.handle_blocking(event)
         await self._incoming_event_queue.task_done()
 
     async def _event_loop(self):
@@ -400,7 +405,6 @@ class Connection:
             t0 = time.time()
             if t0 - self._last_recv > self.timeout:
                 self._set_status('Disconnected')
-                #await self._outgoing_event_queue.put('shutdown') # should be a proper timeout event
                 break
             await self._send_next_package(sock)
             await curio.sleep(max([self.package_interval - time.time() + t0, 0]))
@@ -467,15 +471,26 @@ class ClientConnection(Connection):
         super().__init__(remote_address, event_handler)
         self._command_queue = curio.UniversalQueue()
         self.game_state_context = LockedRessource(GameState())
+    
+    def shutdown(self, shutdown_server:bool=False):
+        curio.run(self.shutdown, shutdown_server)
 
-    def shutdown(self):
-        self._command_queue.put('shutdown')
+    @awaitable(shutdown)
+    async def shutdown(self, shutdown_server:bool=False): #pylint: disable=function-redefined
+        if shutdown_server:
+            await self._command_queue.put('shutdown')
+        else:
+            await self._command_queue.put('shut_me_down')
 
     def _create_next_package(self):
         time_order = self.game_state_context.ressource.time_order
         return ClientPackage(self.local_sequence, self.remote_sequence, self.ack_bitfield, time_order)
 
-    async def loop(self):
+    def loop(self):
+        curio.run(self.loop)
+
+    @awaitable(loop)
+    async def loop(self): #pylint: disable=function-redefined
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             send_loop_task = await curio.spawn(self._send_loop, sock)
             recv_loop_task = await curio.spawn(self._client_recv_loop, sock)
@@ -484,12 +499,14 @@ class ClientConnection(Connection):
             while True:
                 command = await self._command_queue.get()
                 if command == 'shutdown':
-                    # this is only for testing purposes
                     await sock.sendto('shutdown'.encode('utf-8'), self.remote_address)
+                    break
+                elif command == 'shut_me_down':
                     break
             await recv_loop_task.cancel()
             await send_loop_task.cancel()
             await event_loop_task.cancel()
+            self._set_status('Disconnected')
 
     async def _recv(self, package):
         await super()._recv(package)
@@ -506,16 +523,21 @@ class ClientConnection(Connection):
 
 class ServerConnection(Connection):
 
-    def __init__(self, remote_address:tuple, event_handler, game_state_store, last_client_time_order:sqn):
-        super().__init__(remote_address, event_handler)
+    def __init__(self, remote_address:tuple, event_handler, game_state_store, last_client_time_order:sqn, event_wire=None):
+        super().__init__(remote_address, event_handler, event_wire)
         self.game_state_store = game_state_store
         self.last_client_time_order = last_client_time_order
 
     def _create_next_package(self):
         update_cache = self.game_state_store.get_update_cache()
         # Respond by sending the sum of all updates since the client's time-order point.
-        update_base = GameStateUpdate(self.last_client_time_order)
-        update = sum((upd for upd in update_cache if upd > update_base), update_base)
+        # Or the whole game state if the client doesn't have it yet.
+        if self.last_client_time_order == 0:
+            game_state = self.game_state_store.get_game_state()
+            update = GameStateUpdate(**game_state.__dict__)
+        else:
+            update_base = GameStateUpdate(self.last_client_time_order)
+            update = sum((upd for upd in update_cache if upd > update_base), update_base)
         return ServerPackage(self.local_sequence, self.remote_sequence, self.ack_bitfield, update)
 
     async def _recv(self, package:ClientPackage):
@@ -523,28 +545,40 @@ class ServerConnection(Connection):
         self.last_client_time_order = package.time_order
 
     @classmethod
-    async def loop(cls, hostname:str, port:int, connections:dict, event_handler, game_state_update_cache:list):
+    async def loop(cls, hostname:str, port:int, server, event_wire):
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind((hostname, port))
+            server._hostname, server._port = sock.getsockname()
             connection_tasks = curio.TaskGroup()
             while True:
                 data, client_address = await sock.recvfrom(Package.max_size)
                 try:
                     package = ClientPackage.from_datagram(data)
                     # create new connection if client is unknown
-                    if not client_address in connections:
-                        new_connection = cls(client_address, event_handler, game_state_update_cache, package.time_order)
-                        new_connection._set_status('Connected')
+                    if not client_address in server.connections:
+                        new_connection = cls(
+                            client_address,
+                            server._universal_event_handler,
+                            server.game_state_store,
+                            package.time_order,
+                            event_wire
+                        )
                         await connection_tasks.spawn(new_connection._send_loop, sock)
                         await connection_tasks.spawn(new_connection._event_loop)
-                        connections[client_address] = new_connection
-                    await connections[client_address]._recv(package)
+                        # For now, the first client connection becomes host
+                        if server.host_client is None:
+                            server.host_client = client_address
+                        server.connections[client_address] = new_connection
+                    elif server.connections[client_address].status == ConnectionStatus.get('Disconnected'):
+                        await connection_tasks.spawn(server.connections[client_address]._send_loop, sock)
+                    await server.connections[client_address]._recv(package)
                 except ProtocolIDMismatchError:
                     # ignore all non-Pygase packages
                     pass
-                # this is a rudimentary shutdown switch
                 try:
-                    if data.decode('utf-8') == 'shutdown':
+                    if data.decode('utf-8') == 'shutdown' and client_address == server.host_client:
+                        break
+                    elif data.decode('utf-8') == 'shut_me_down':
                         break
                 except UnicodeDecodeError:
                     pass

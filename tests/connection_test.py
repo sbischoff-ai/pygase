@@ -267,9 +267,11 @@ class TestConnection:
             call_count = 0
             def __init__(self):
                 self.events = []
-            def handle_blocking(self, event):
+            def handle_blocking(self, event, **kwargs):
                 EventHandler.call_count += 1
                 self.events.append(event)
+            def has_type(self, event_type):
+                return True
         event_handler = EventHandler()
         connection = Connection(('', 0), event_handler)
         assert connection.event_handler == event_handler
