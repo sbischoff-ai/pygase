@@ -357,7 +357,7 @@ class Connection:
                 if pending_sequence in self._events_with_callbacks:
                     for event_sequence in self._events_with_callbacks[pending_sequence]:
                         if self._event_callbacks[event_sequence]['ack'] is not None:
-                            self._event_callbacks[event_sequence]['ack']()
+                            await self._event_callbacks[event_sequence]['ack']()
                             del self._event_callbacks[event_sequence]
                     del self._events_with_callbacks[pending_sequence]
                 del self._pending_acks[pending_sequence]

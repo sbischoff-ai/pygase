@@ -11,6 +11,7 @@ game_state_store = GameStateStore(initial_game_state)
 game_state_machine = GameStateMachine(game_state_store)
 
 def on_join(player_name, game_state, dt):
+    print('Player', player_name, 'joined.')
     # count up for player ids, starting with 1
     player_id = max(game_state.players.keys()) + 1 if game_state.players else 1
     return {
