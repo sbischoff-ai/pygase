@@ -80,9 +80,9 @@ def game_loop():
                 event_type='MOVE',
                 player_id=local_player_id,
                 new_position=(
-                        (old_position[0] + dx) % screen_width,
-                        (old_position[1] + dy) % screen_height
-                    )
+                    (old_position[0] + dx) % screen_width,
+                    (old_position[1] + dy) % screen_height
+                )
             )
         # Do the thing.
         pygame.display.flip()

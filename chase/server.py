@@ -20,7 +20,7 @@ def on_join(player_name, game_state, dt):
                 'position': (0, 0)
             }
         },
-        'chaser': player_id if game_state.chaser == None else None
+        'chaser': player_id if game_state.chaser is None else None
     }
 
 def on_move(player_id, new_position, game_state, dt):
