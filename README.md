@@ -1,6 +1,6 @@
-[![Build Status](https://dev.azure.com/pxlbrain/pygase/_apis/build/status/sbischoff-ai.python-game-service?branchName=pygase02)](https://dev.azure.com/pxlbrain/pygase/_build/latest?definitionId=1&branchName=pygase02)
-![Azure DevOps tests (branch)](https://img.shields.io/azure-devops/tests/pxlbrain/pygase/1/pygase02.svg)
-![Azure DevOps coverage (branch)](https://img.shields.io/azure-devops/coverage/pxlbrain/pygase/1/pygase02.svg)
+[![Build Status](https://dev.azure.com/pxlbrain/pygase/_apis/build/status/sbischoff-ai.python-game-service?branchName=master)](https://dev.azure.com/pxlbrain/pygase/_build/latest?definitionId=1&branchName=master)
+![Azure DevOps tests (branch)](https://img.shields.io/azure-devops/tests/pxlbrain/pygase/1/master.svg)
+![Azure DevOps coverage (branch)](https://img.shields.io/azure-devops/coverage/pxlbrain/pygase/1/master.svg)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
 ![PyPI](https://img.shields.io/pypi/v/pygase.svg)
