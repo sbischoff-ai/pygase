@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+'''
 import time
 import socketserver
 import pygase.client
@@ -20,3 +21,4 @@ class TestClient:
         time.sleep(0.3) # some tolerance
         assert not connection.is_waiting() and not connection.is_connected()
         assert not connection._update_cycle_thread.is_alive()
+'''
