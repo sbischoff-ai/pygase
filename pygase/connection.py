@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+'''
+This module contains the low-level network logic of PyGaSe and is not supposed to be required
+by any users of this library.
+'''
 
 import time
 
@@ -170,6 +174,12 @@ class Package:
         return not self.__eq__(other)
 
 class ClientPackage(Package):
+    '''
+    Subclass of **Package** that describes packages sent by **ClientConnection**s.
+
+    ### Arguments
+     - **time_order** *int/sqn*: the clients last known time order 
+    '''
     def __init__(self, sequence:int, ack:int, ack_bitfield:str, time_order:int, events:list=None):
         super().__init__(sequence, ack, ack_bitfield, events)
         self.time_order = sqn(time_order)
@@ -215,6 +225,12 @@ class ClientPackage(Package):
         return result
 
 class ServerPackage(Package):
+    '''
+    Subclass of **Package** that describes packages sent by **ServerConnection**s.
+
+    ### Arguments
+     - **game_state_update** *GameStateUpdate*: the servers most recent minimal update for the client 
+    '''
     def __init__(self, sequence:int, ack:int, ack_bitfield:str, game_state_update:GameStateUpdate, events:list=None):
         super().__init__(sequence, ack, ack_bitfield, events)
         self.game_state_update = game_state_update
@@ -275,6 +291,7 @@ class Connection:
      - **remote_address** *(str, int)*: A tuple `('hostname', port)` *required*
      - **event_handler**: An object that has a callable `handle()` attribute that takes
        an **Event** as argument, for example a **Pygase.event.UniversalEventHandler** instance
+     - **event_wire**: object to which events are to be repeated (has to implement a *_push_event* method)
 
     ### Attributes
      - **remote_address** *(str, int)*: A tuple `('hostname', port)`
@@ -381,6 +398,14 @@ class Connection:
                 await self._event_wire._push_event(event)
 
     def dispatch_event(self, event:Event, ack_callback=None, timeout_callback=None):
+        '''
+        ### Arguments
+         - **event** *Event*: the event to be sent to connection partner
+        
+        ### Optional Arguments
+         - **ack_callback**: function or coroutine to be executed after the event was received
+         - **timeout_callback**: function or coroutine to be executed if the event was not received
+        '''
         callback_sequence = 0
         if ack_callback is not None or timeout_callback is not None:
             self._event_callback_sequence += 1
@@ -472,13 +497,25 @@ class Connection:
                 state['last_good_quality_milestone'] = t
 
 class ClientConnection(Connection):
+    '''
+    Subclass of **Connection** that describes the client side of a Pygase connection.
 
+    ### Attributes
+     - **game_state_context** *LockedRessource*: provides thread-safe access to a *GameState* object
+    '''
     def __init__(self, remote_address, event_handler):
         super().__init__(remote_address, event_handler)
         self._command_queue = curio.UniversalQueue()
         self.game_state_context = LockedRessource(GameState())
     
     def shutdown(self, shutdown_server:bool=False):
+        '''
+        Shuts down the client connection. (Can also be called as a coroutine.)
+
+        ### Optional Arguments
+         - **shutdown_server** *bool*: wether or not the server should be shut down too.
+            (Only has an effect if the client has host permissions.)
+        '''
         curio.run(self.shutdown, shutdown_server)
 
     @awaitable(shutdown)
@@ -493,6 +530,9 @@ class ClientConnection(Connection):
         return ClientPackage(self.local_sequence, self.remote_sequence, self.ack_bitfield, time_order)
 
     def loop(self):
+        '''
+        The loop that will send and receive packages and handle events. (Can also be called as a coroutine.)
+        '''
         curio.run(self.loop)
 
     @awaitable(loop)
@@ -528,7 +568,13 @@ class ClientConnection(Connection):
             await self._recv(package)
 
 class ServerConnection(Connection):
+    '''
+    Subclass of **Connection** that describes the server side of a Pygase connection.
 
+    ### Attributes
+     - **game_state_store** *GameStateStore*: the backends **GameStateStore** that provides the state for this client
+     - **last_client_time_order** *sqn*: the clients last known time order
+    '''
     def __init__(self, remote_address:tuple, event_handler, game_state_store, last_client_time_order:sqn, event_wire=None):
         super().__init__(remote_address, event_handler, event_wire)
         self.game_state_store = game_state_store
@@ -552,6 +598,16 @@ class ServerConnection(Connection):
 
     @classmethod
     async def loop(cls, hostname:str, port:int, server, event_wire):
+        '''
+        Coroutine that deals with a **Server**s connections to clients.
+
+        ### Arguments
+         - **hostname** *str*: the hostname to which to bind the server socket
+         - **port** *int*: the port number to which to bind the server socket
+         - **server** *Server*: the **Server** for which this loop is run
+         - **event_wire**: object to which events are to be repeated
+           (has to implement a *_push_event* method and is typically a **GameStateMachine**)
+        '''
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind((hostname, port))
             server._hostname, server._port = sock.getsockname()
