@@ -31,11 +31,12 @@ u-msgpack-python = "^2.5"
 pytest = "^4.4"
 pylint = "^2.3"
 black = {version = "^18.3-alpha.0",allows-prereleases = true}
-
-[build-system]
-requires = ["poetry>=0.12"]
-build-backend = "poetry.masonry.api"
+freezegun = "^0.3.11"
 
 [tool.black]
 line-length = 119
 target_version = ['py36']
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
