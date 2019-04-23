@@ -419,7 +419,7 @@ class Connection:
     async def _handle_next_event(self):
         event = await self._incoming_event_queue.get()
         if self.event_handler.has_type(event.type):
-            self.event_handler.handle_blocking(event)
+            await self.event_handler.handle(event)
         await self._incoming_event_queue.task_done()
 
     async def _event_loop(self):

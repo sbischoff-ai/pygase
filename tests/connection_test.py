@@ -267,7 +267,7 @@ class TestConnection:
             call_count = 0
             def __init__(self):
                 self.events = []
-            def handle_blocking(self, event, **kwargs):
+            async def handle(self, event, **kwargs):
                 EventHandler.call_count += 1
                 self.events.append(event)
             def has_type(self, event_type):
