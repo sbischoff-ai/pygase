@@ -24,6 +24,17 @@ steps:
   displayName: 'Install dependencies'
 
 - script: |
-    #poetry add --dev pytest-azurepipelines
-    poetry run pytest
+    poetry run pytest tests --doctest-modules --junitxml=junit/test-results.xml --cov=pygase --cov-report=xml --cov-report=html
   displayName: 'pytest'
+
+- task: PublishTestResults@2
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFiles: '**/test-*.xml'
+    testRunTitle: 'Publish test results for Python $(python.version)'
+
+- task: PublishCodeCoverageResults@1
+  inputs:
+    codeCoverageTool: Cobertura
+    summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/coverage.xml'
+    reportDirectory: '$(System.DefaultWorkingDirectory)/**/htmlcov'

@@ -32,6 +32,7 @@ pytest = "^4.4"
 pylint = "^2.3"
 black = {version = "^18.3-alpha.0",allows-prereleases = true}
 freezegun = "^0.3.11"
+pytest-cov = "^2.6"
 
 [tool.black]
 line-length = 119
