@@ -22,7 +22,7 @@ class Server:
     
     ### Attributes
      - **connections** *dict*: contains each clients address as a key leading to the
-       corresponding **ClientConnection** instance
+       corresponding **ServerConnection** instance
      - **host_client**: address of the host client, if there is any
      - **game_state_store** *GameStateStore*: part of the backend that provides the **GameState**
     
