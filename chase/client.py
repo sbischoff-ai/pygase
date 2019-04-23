@@ -2,7 +2,7 @@
 Example game client
 '''
 
-from curio import sleep
+from time import sleep
 import pygame
 import pygame.locals
 from pygase import Client
@@ -15,34 +15,29 @@ class ChaseGame:
     clock = pygame.time.Clock()
 
     @classmethod
-    def start(cls):
+    def init(cls):
         '''Connect the client and join a new player to the server.'''
         cls.client.connect_in_thread(hostname='localhost', port=8080)
         cls.local_player_name = input('Player name: ')
         cls.client.dispatch_event(
             event_type='JOIN',
-            handler_args=[cls.local_player_name],
-            ack_callback=cls.game_loop
+            handler_args=[cls.local_player_name]
         )
 
     @classmethod
-    async def game_loop(cls):
-        '''
-        Basically the whole game
-        '''
+    def set_player_id(cls):
         # Get the player's ID
-        for _ in range(5):
-            print(cls.client.connection.game_state_context.ressource.__dict__)
-            print('---')
-            await sleep(0.2)
         while cls.local_player_id is None:
             with cls.client.access_game_state() as game_state:
                 for player_id, player in game_state.players.items():
                     if player['name'] == cls.local_player_name:
                         cls.local_player_id = player_id
-                print(game_state.__dict__)
-            print('---')
-            await sleep(0.5)
+
+    @classmethod
+    def game_loop(cls):
+        '''
+        Render frames
+        '''
         # Initialize a pygame screen
         pygame.init()
         screen_width = 640
@@ -57,7 +52,7 @@ class ChaseGame:
                 for player_id, player in game_state.players.items():
                     is_chaser = player_id == game_state.chaser
                     is_self = player_id == cls.local_player_id
-                    draw_player(screen, player['position'], is_chaser, is_self)
+                    cls.draw_player(screen, player['position'], is_chaser, is_self)
             # Handle events
             for event in pygame.event.get():
                 if event.type == pygame.locals.QUIT:
@@ -89,8 +84,10 @@ class ChaseGame:
                 )
             # Do the thing.
             pygame.display.flip()
-            await sleep(0)
         pygame.quit()
+    
+    @classmethod
+    def cleanup(cls):
         # You need to disconnect from the server
         cls.client.disconnect(shutdown_server=True)
 
@@ -108,4 +105,7 @@ class ChaseGame:
             color = (255, 50, 50) if is_chaser else (50, 50, 255)
         pygame.draw.circle(screen, color, position, 10)
 
-ChaseGame.start()
+ChaseGame.init()
+ChaseGame.set_player_id()
+ChaseGame.game_loop()
+ChaseGame.cleanup()
