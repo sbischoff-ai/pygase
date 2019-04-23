@@ -243,7 +243,7 @@ class GameStateMachine:
             update_dict = self.time_step(game_state, dt)
             while not self._event_queue.empty():
                 event = await self._event_queue.get()
-                event_update = self._universal_event_handler.handle_blocking(event, game_state=game_state, dt=dt)
+                event_update = await self._universal_event_handler.handle(event, game_state=game_state, dt=dt)
                 update_dict.update(event_update)
                 if time.time() - t0 > 0.95*interval:
                     break

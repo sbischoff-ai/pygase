@@ -50,7 +50,7 @@ class ChaseGame:
             screen.fill((0, 0, 0))
             with cls.client.access_game_state() as game_state:
                 for player_id, player in game_state.players.items():
-                    is_chaser = player_id == game_state.chaser
+                    is_chaser = player_id == game_state.chaser_id
                     is_self = player_id == cls.local_player_id
                     cls.draw_player(screen, player['position'], is_chaser, is_self)
             # Handle events
