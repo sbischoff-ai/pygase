@@ -9,15 +9,15 @@ from pygase.utils import Sendable, NamedEnum
 
 class Event(Sendable):
     '''
-    ### Arguments
+    #### Arguments
      - **event_type** *str*: string that identifies the event and links it to a handler
     
-    ### Optional Arguments
+    #### Optional Arguments
      - **handler_args** *list*: list of positional arguments to be passed to the handler function that will be invoked
        on the other side of the connection
      - **handler_kwargs** *dict*: dict of keyword arguments to be passed to the handler function
     
-    ### Attributes
+    #### Attributes
      - **type** *str*
      - **handler_args** *list*
      - **handler_kwargs** *dict*
@@ -36,7 +36,7 @@ class UniversalEventHandler:
 
     def push_event_handler(self, event_type:str, event_handler_function):
         '''
-        ### Arguments
+        #### Arguments
          - **event_type** *str*: string that identifies the events to be handles by this function
          - **event_handler_function**: callbackfunction that will be invoked with the handler args 
            and kwargs with which the incoming event has been dispatched (can also be a coroutine)
@@ -47,10 +47,10 @@ class UniversalEventHandler:
         '''
         calls the appropriate handler function
 
-        ### Arguments
+        #### Arguments
          - **event** *Event*: the event to be handled
         
-        ### Optional Arguments
+        #### Optional Arguments
          - **kwargs** *dict*: additional keyword arguments to be passed to the handler function
         '''
         if iscoroutinefunction(self._event_handlers[event.type]):
@@ -60,10 +60,10 @@ class UniversalEventHandler:
 
     def has_type(self, event_type:str):
         '''
-        ### Arguments
+        #### Arguments
          - **event_type** *str*: event type for which to check
         
-        ### Returns
+        #### Returns
          `True` if a handler has been pushed for the given event type, `False` otherwise
         '''
         return event_type in self._event_handlers

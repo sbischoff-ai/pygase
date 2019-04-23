@@ -1,80 +1,92 @@
-<h1 id="pygase">pygase</h1>
+# pygase
 
+PyGaSe, or Python Game Service, is a library (or framework, whichever name you prefer) that provides
+a complete set of high-level components for real-time networking for games.
 
-<h1 id="pygase.client">pygase.client</h1>
+# pygase.client
 
+Provides the **Client** class.
 
-This module mainly contains the *Connection* class, which represents a connection to a
-running *Server*. Use this to manage your server connections.
-
-**Note: If you want to connect to a server in another local network you must use the proper IPv4
-address of that network, and not the local IP address of the server. Also the port on port on
-which the *Server* serves has to be properly forwarded within that network.**
-
-<h2 id="pygase.client.ConnectionStatus">ConnectionStatus</h2>
-
+## Client
 ```python
-ConnectionStatus(self, /, *args, **kwargs)
+Client(self)
 ```
 
-Enum class with the following values:
-- *Connected*: Connection is running.
-- *WaitingForServer*: Connection is trying to connect/reconnect to the server.
-- *Disconnected*: Connection is not communicating with the server.
+#### Attributes
+ - **connection** *ClientConnection*: object that contains all networking information
 
-<h2 id="pygase.client.Connection">Connection</h2>
-
+### connect
 ```python
-Connection(self, server_address, closed=False)
+Client.connect(self, port:int, hostname:str='localhost')
 ```
 
-Initialization of a *Connection* will open a connection to a BossFight Server
-with the specified *server_address* as a tuple containing the IP-adress as a string and the
-port as an int. Check the *connection_status* attribute to get the status of the Connection as
-a *ConnectionStatus* attribute.
+Open a connection to a PyGaSe server. (Can be called as a coroutine.)
 
-A running *Connection* will request an update of *game_state* from the server
-every *update_cycle_interval* seconds.
+#### Arguments
+ - **port** *int*: port number of the server to which to connect
 
-<h3 id="pygase.client.Connection.connect">connect</h3>
+#### Optional Arguments
+ - **hostname** *str*: hostname of the server to which to connect
 
+### connect_in_thread
 ```python
-Connection.connect(self)
+Client.connect_in_thread(self, port:int, hostname:str='localhost')
 ```
 
-Will try to connect/reconnect to the server if *connection_status* is
-*ConnectionStatus.Disconnected*, otherwise does nothing.
+Open a connection in a seperate thread.
 
-<h3 id="pygase.client.Connection.disconnect">disconnect</h3>
+See **Client.connect(port, hostname)**.
 
+#### Returns
+*threading.Thread*: the thread the client loop runs in
+
+### disconnect
 ```python
-Connection.disconnect(self)
+Client.disconnect(self, shutdown_server:bool=False)
 ```
 
-Will stop the connection from sending any further requests to the server.
-Will do nothing if *connection_status* == *ConnectionStatus.Disconnected*.
+Close the client connection. (Can also be called as a coroutine.)
 
-<h3 id="pygase.client.Connection.is_connected">is_connected</h3>
+#### Optional Arguments
+ - **shutdown_server** *bool*: wether or not the server should be shut down.
+    (Only has an effect if the client has host permissions.)
 
+### access_game_state
 ```python
-Connection.is_connected(self)
+Client.access_game_state(self)
 ```
 
-Returns *True* if the connection status is *Connected*.
+Returns a context manager to access the shared game state in a thread-safe way.
 
-<h3 id="pygase.client.Connection.is_waiting">is_waiting</h3>
-
+Example:
 ```python
-Connection.is_waiting(self)
+with client.access_game_state() as game_state:
+    do_stuff(game_state)
 ```
 
-Returns *True* if the connection status is *WaitingForServer*.
-
-<h3 id="pygase.client.Connection.post_client_activity">post_client_activity</h3>
-
+### dispatch_event
 ```python
-Connection.post_client_activity(self, client_activity:pygase.shared.ClientActivity)
+Client.dispatch_event(self, event_type:str, handler_args:list=[], retries:int=0, ack_callback=None, **kwargs)
 ```
 
-Sends the *ClientActivity* object to the server.
+Sends an event to the server.
+
+#### Arguments
+ - **event_type** *str*: string that identifies the event and links it to a handler
+
+#### Optional Arguments
+ - **handler_args** *list*: list of positional arguments to be passed to the handler function that will be invoked
+   by the server
+ - **retries** *int*: number of times the event is to be resent, in the case it times out
+ - **ack_callback**: function or coroutine to be executed after the event was received
+ - **kwargs** *dict*: keyword arguments to be passed to the handler function
+
+### push_event_handler
+```python
+Client.push_event_handler(self, event_type:str, handler_func)
+```
+
+#### Arguments
+ - **event_type** *str*: event type to link the handler function to
+ - **handler_func**: function or coroutine to be invoked for events of the given type
 

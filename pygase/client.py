@@ -13,7 +13,7 @@ from pygase.event import UniversalEventHandler, Event
 
 class Client:
     '''
-    ### Attributes
+    #### Attributes
      - **connection** *ClientConnection*: object that contains all networking information
     '''
     def __init__(self):
@@ -24,10 +24,10 @@ class Client:
         '''
         Open a connection to a PyGaSe server. (Can be called as a coroutine.)
 
-        ### Arguments
+        #### Arguments
          - **port** *int*: port number of the server to which to connect
         
-        ### Optional Arguments
+        #### Optional Arguments
          - **hostname** *str*: hostname of the server to which to connect
         '''
         self.connection = ClientConnection((hostname, port), self._universal_event_handler)
@@ -44,7 +44,7 @@ class Client:
 
         See **Client.connect(port, hostname)**.
 
-        ### Returns
+        #### Returns
         *threading.Thread*: the thread the client loop runs in
         '''
         self.connection = ClientConnection((hostname, port), self._universal_event_handler)
@@ -56,7 +56,7 @@ class Client:
         '''
         Close the client connection. (Can also be called as a coroutine.)
 
-        ### Optional Arguments
+        #### Optional Arguments
          - **shutdown_server** *bool*: wether or not the server should be shut down.
             (Only has an effect if the client has host permissions.)
         '''
@@ -82,10 +82,10 @@ class Client:
         '''
         Sends an event to the server.
 
-        ### Arguments
+        #### Arguments
          - **event_type** *str*: string that identifies the event and links it to a handler
         
-        ### Optional Arguments
+        #### Optional Arguments
          - **handler_args** *list*: list of positional arguments to be passed to the handler function that will be invoked
            by the server
          - **retries** *int*: number of times the event is to be resent, in the case it times out
@@ -104,7 +104,7 @@ class Client:
 
     def push_event_handler(self, event_type:str, handler_func):
         '''
-        ### Arguments
+        #### Arguments
          - **event_type** *str*: event type to link the handler function to
          - **handler_func**: function or coroutine to be invoked for events of the given type
         '''

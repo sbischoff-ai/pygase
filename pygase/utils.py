@@ -17,7 +17,7 @@ class Sendable:
 
     def to_bytes(self):
         '''
-        ### Returns
+        #### Returns
           A small binary representation of the object.
         '''
         return umsgpack.packb(self.__dict__, force_float_precision='single')
@@ -25,10 +25,10 @@ class Sendable:
     @classmethod
     def from_bytes(cls, bytepack:bytes):
         '''
-        ### Arguments
+        #### Arguments
          - **bytepack** *bytes*: the bytestring to be parsed to a **Sendable**
 
-        ### Returns
+        #### Returns
           A copy of the object that was packed into byte format
         '''
         try:
@@ -55,13 +55,13 @@ class NamedEnum:
     @classmethod
     def get(cls, name_or_value):
         '''
-        ### Arguments
+        #### Arguments
          - **name_or_value** *str/int*: label or value to de- or encode
         
-        ### Returns
+        #### Returns
           Integer value for given string label or vice versa
         
-        ### Raises
+        #### Raises
           - **TypeError** if argument is neither *int* nor *str*
         '''
         if isinstance(name_or_value, int):
@@ -74,7 +74,7 @@ class NamedEnum:
     @classmethod
     def register(cls, name: str):
         '''
-        ### Arguments
+        #### Arguments
          - **name** *str*: string label to register as new enum value
         '''
         if name not in cls._values:
@@ -94,7 +94,7 @@ class sqn(int):
         '''
         Caution: This will reset the bytesize and wrap-over behaviour for all **sqn** instances.
 
-        ### Arguments
+        #### Arguments
          - **bytesize** *int*: new size for the *bytes* representation of **sqn**s
         '''
         cls._bytesize = bytesize
@@ -103,7 +103,7 @@ class sqn(int):
     @classmethod
     def get_max_sequence(cls):
         '''
-        ### Returns
+        #### Returns
           *int*: maximum sequence number, after which **sqn**s wrap back to 1
         '''
         return cls(cls._max_sequence)
@@ -140,7 +140,7 @@ class sqn(int):
 
     def to_bytes(self):
         '''
-        ### Returns
+        #### Returns
           *bytes* representation of the number of exactly the currenly set bytesize
         '''
         return super().to_bytes(self._bytesize, 'big')
@@ -148,10 +148,10 @@ class sqn(int):
     @classmethod
     def from_bytes(cls, b):
         '''
-        ### Arguments
+        #### Arguments
          - **b** *bytes*: bytestring to decode
         
-        ### Returns
+        #### Returns
           **sqn** object that was encoded in given bytestring
         '''
         return cls(super().from_bytes(b, 'big'))
@@ -168,7 +168,7 @@ class LockedRessource:
         # do stuff without any other threads meddling with the ressource
     ```
 
-    ### Arguments
+    #### Arguments
      - **ressource**: object to be wrapped
     '''
     def __init__(self, ressource):
@@ -184,7 +184,7 @@ class LockedRessource:
 
 def get_available_ip_addresses():
     '''
-    ### Returns
+    #### Returns
       A list of all available IP(v4) addresses the server can be bound to.
     '''
     addresses = []

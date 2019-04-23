@@ -17,16 +17,16 @@ class Server:
     '''
     Part of the PyGaSe backend that handles connections to clients.
 
-    ### Arguments
+    #### Arguments
      - **game_state_store** *GameStateStore*: part of the backend that provides the **GameState**
     
-    ### Attributes
+    #### Attributes
      - **connections** *dict*: contains each clients address as a key leading to the
        corresponding **ServerConnection** instance
      - **host_client**: address of the host client, if there is any
      - **game_state_store** *GameStateStore*: part of the backend that provides the **GameState**
     
-    ### Properties
+    #### Properties
      - **hostname** *str*: read-only access to the servers hostname
      - **port** *int*: read-only access to the servers port number
     '''
@@ -42,7 +42,7 @@ class Server:
         '''
         Starts the server under specified address. (Can also be called as a coroutine.)
 
-        ### Arguments
+        #### Arguments
          - **port** *int*: port number the server will be bound to, default will be an available
            port chosen by the computers network controller
          - **hostname** *str*: hostname or IP address the server will be bound to.
@@ -64,7 +64,7 @@ class Server:
 
         See **Server.run(port, hostname)**.
 
-        ### Returns
+        #### Returns
         *threading.Thread*: the thread the server loop runs in
         '''
         thread = threading.Thread(target=self.run, args=(port, hostname, event_wire), daemon=daemon)
@@ -94,10 +94,10 @@ class Server:
         '''
         Sends an event to one or all clients.
 
-        ### Arguments
+        #### Arguments
          - **event_type** *str*: string that identifies the event and links it to a handler
         
-        ### Optional Arguments
+        #### Optional Arguments
          - **handler_args** *list*: list of positional arguments to be passed to the handler function that will be invoked
            by the client
          - **target_client**: either `'all'` for an event broadcast or a clients address
@@ -136,7 +136,7 @@ class Server:
 
     def push_event_handler(self, event_type:str, handler_func):
         '''
-        ### Arguments
+        #### Arguments
          - **event_type** *str*: event type to link the handler function to
          - **handler_func**: function or coroutine to be invoked for events of the given type
         '''

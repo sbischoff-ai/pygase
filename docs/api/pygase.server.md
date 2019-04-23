@@ -1,124 +1,91 @@
-<h1 id="pygase">pygase</h1>
+# pygase
 
+PyGaSe, or Python Game Service, is a library (or framework, whichever name you prefer) that provides
+a complete set of high-level components for real-time networking for games.
 
-<h1 id="pygase.server">pygase.server</h1>
+# pygase.server
 
+Provides the **Server** class.
 
-This module defines the *Server* class, a server that can handle requests from
-a client's *Connection* object and the *GameLoop*, which simulates the game logic.
-
-**Note: The IP address you bind the Server to is a local IP address from the
-192.168.x.x address space. If you want computers outside your local network to be
-able to connect to your game server, you will have to forward the port from the local
-address your server is bound to to your external IPv4 address!**
-
-<h2 id="pygase.server.Server">Server</h2>
-
+## Server
 ```python
-Server(self, ip_address:str, port:int, game_loop_class:type, game_state:pygase.shared.GameState)
+Server(self, game_state_store:pygase.gamestate.GameStateStore)
 ```
 
-Threading UDP server that manages clients and processes requests.
-*game_loop_class* is your subclass of *GameLoop*, which implements the handling of activities
-and the game state update function. *game_state* is an instance of *pygase.shared.GameState* that
-holds all necessary initial data.
+Part of the PyGaSe backend that handles connections to clients.
 
-Call *start()* for the server to start handling requests from
-*Connection*s. Call *shutdown()* to stop it.
+#### Arguments
+ - **game_state_store** *GameStateStore*: part of the backend that provides the **GameState**
 
-*game_loop* is the server's *GameLoop* object, which simulates the game logic and updates
-the *game_state*.
+#### Attributes
+ - **connections** *dict*: contains each clients address as a key leading to the
+   corresponding **ServerConnection** instance
+ - **host_client**: address of the host client, if there is any
+ - **game_state_store** *GameStateStore*: part of the backend that provides the **GameState**
 
-<h3 id="pygase.server.Server.start">start</h3>
+#### Properties
+ - **hostname** *str*: read-only access to the servers hostname
+ - **port** *int*: read-only access to the servers port number
 
+### run
 ```python
-Server.start(self)
+Server.run(self, port:int=0, hostname:str='localhost', event_wire=None)
 ```
 
-Runs the server in a dedicated Thread and starts the game loop.
-Does nothing if server is already running.
-Must be called for the server to handle requests and is terminated by *shutdown()*
+Starts the server under specified address. (Can also be called as a coroutine.)
 
-<h3 id="pygase.server.Server.shutdown">shutdown</h3>
+#### Arguments
+ - **port** *int*: port number the server will be bound to, default will be an available
+   port chosen by the computers network controller
+ - **hostname** *str*: hostname or IP address the server will be bound to.
+   Defaults to `'localhost'`.
+ - **event_wire**: object to which events are to be repeated
+   (has to implement a *_push_event* method and is typically a **GameStateMachine**)
 
+### run_in_thread
+```python
+Server.run_in_thread(self, port:int=0, hostname:str='localhost', event_wire=None, daemon=True)
+```
+
+Starts the server under specified address and in a seperate thread.
+
+See **Server.run(port, hostname)**.
+
+#### Returns
+*threading.Thread*: the thread the server loop runs in
+
+### shutdown
 ```python
 Server.shutdown(self)
 ```
 
-Stops the server's request handling and pauses the game loop.
+Shuts down the server. (can be restarted via **run**)
 
-<h3 id="pygase.server.Server.get_ip_address">get_ip_address</h3>
-
+### dispatch_event
 ```python
-Server.get_ip_address(self)
+Server.dispatch_event(self, event_type:str, handler_args:list=[], target_client='all', retries:int=0, ack_callback=None, **kwargs)
 ```
 
-Returns the servers IP address as a string.
+Sends an event to one or all clients.
 
-<h3 id="pygase.server.Server.get_port">get_port</h3>
+#### Arguments
+ - **event_type** *str*: string that identifies the event and links it to a handler
 
+#### Optional Arguments
+ - **handler_args** *list*: list of positional arguments to be passed to the handler function that will be invoked
+   by the client
+ - **target_client**: either `'all'` for an event broadcast or a clients address
+ - **retries** *int*: number of times the event is to be resent, in the case it times out
+ - **ack_callback**: function or coroutine to be executed after the event was received,
+   will be passed a reference to the client connection
+ - **kwargs** *dict*: keyword arguments to be passed to the handler function
+
+### push_event_handler
 ```python
-Server.get_port(self)
+Server.push_event_handler(self, event_type:str, handler_func)
 ```
 
-Returns the servers port as an integer.
-
-<h2 id="pygase.server.GameLoop">GameLoop</h2>
-
-```python
-GameLoop(self, server:pygase.server.Server)
-```
-
-Class that can update a shared game state by running a game logic simulation thread.
-
-You should inherit from this class and implement the *handle_activity()* and
-*update_game_state()* methods, as well as *on_join()*.
-
-<h3 id="pygase.server.GameLoop.start">start</h3>
-
-```python
-GameLoop.start(self)
-```
-
-Starts a thread that updates the shared game state every *update_cycle_interval* seconds.
-Use this to restart a paused game.
-
-<h3 id="pygase.server.GameLoop.pause">pause</h3>
-
-```python
-GameLoop.pause(self)
-```
-
-Stops the game loop until *start()* is called.
-If the game loop is not currently running does nothing.
-
-<h3 id="pygase.server.GameLoop.on_join">on_join</h3>
-
-```python
-GameLoop.on_join(self, player_id:int, update:pygase.shared.GameStateUpdate)
-```
-
-Override this method to define your initial player data.
-*update.players[player_id]* will already be accessible when *on_join* is called.
-
-
-<h3 id="pygase.server.GameLoop.handle_activity">handle_activity</h3>
-
-```python
-GameLoop.handle_activity(self, activity:pygase.shared.ClientActivity, update:pygase.shared.GameStateUpdate, dt)
-```
-
-Override this method to implement handling of client activities. Any state changes should be
-written into the update argument of this method.
-
-<h3 id="pygase.server.GameLoop.update_game_state">update_game_state</h3>
-
-```python
-GameLoop.update_game_state(self, update:pygase.shared.GameStateUpdate, dt)
-```
-
-Override to implement an iteration of your game logic simulation.
-State changes should be written into the update argument.
-Attributes of the shared game state that do not change at all, should not
-be assigned to *update* (in order to optimize network performance).
+#### Arguments
+ - **event_type** *str*: event type to link the handler function to
+ - **handler_func**: function or coroutine to be invoked for events of the given type
 

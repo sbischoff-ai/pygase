@@ -23,7 +23,7 @@ class Package:
     A network package that implements the Pygase protocol and is created, sent, received and resolved by
     Pygase **Connections**s.
 
-    ### Arguments
+    #### Arguments
      - **sequence** *int*: sequence number of the package on its senders side of the connection
      - **ack** *int*: sequence number of the last received package from the recipients side of the connection
     A sequence of `0` means no packages have been sent or received.
@@ -32,19 +32,19 @@ class Package:
        with the first character corresponding the packge directly preceding it and so forth.
        `'1'` means the package has been received, `'0'` means it hasn't.
 
-    ### Optional Arguments
+    #### Optional Arguments
      - **events** *[Event]*: list of Pygase events that is to be attached to this package and sent via network
 
-    ### Class Attributes
+    #### Class Attributes
      - **timeout** *float*: time in seconds after which a package is considered to be lost, `1.0` by default
-     - **max_size** int*: maximum size in bytes a package may have
+     - **max_size** *int*: maximum size in bytes a package may have, `2048` by default
 
-    ### Attributes
+    #### Attributes
      - **sequence** *sqn*: packages sequence number
      - **ack** *sqn*: last received remote sequence number
      - **ack_bitfield** *str*: acknowledgement status of 32 preceding remote sequence numbers as boolean bitstring
     
-    ### Properties
+    #### Properties
      - **events**: iterable of **Event** objects contained in the package
     '''
     timeout = 1.0 # package timeout in seconds
@@ -64,10 +64,10 @@ class Package:
 
     def add_event(self, event:Event):
         '''
-        ### Arguments
+        #### Arguments
          - **event** *Event*: a Pygase event that is to be attached to this package
         
-        ### Raises
+        #### Raises
          - **OverflowError**: if the package had previously been converted to a datagram and
            and its size with the added event would exceed **max_size**
         '''
@@ -80,7 +80,7 @@ class Package:
 
     def get_bytesize(self):
         '''
-        ### Returns
+        #### Returns
         *int*: size of the package as a datagram in bytes
         '''
         if self._datagram is None:
@@ -89,10 +89,10 @@ class Package:
 
     def to_datagram(self):
         '''
-        ### Returns
+        #### Returns
         *bytes*: compact bytestring representing the package, which can be sent via a datagram socket
         
-        ### Raises
+        #### Raises
          - **OverflowError**: if the resulting datagram would exceed **max_size**
         '''
         if self._datagram is not None:
@@ -124,13 +124,13 @@ class Package:
     @classmethod
     def from_datagram(cls, datagram:bytes):
         '''
-        ### Arguments
+        #### Arguments
          - **datagram** *bytes*: bytestring data, typically received via a socket
         
-        ### Returns
+        #### Returns
         *Package*: the package from which the datagram has been created using `to_datagram()`
 
-        ### Raises
+        #### Raises
          - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
         '''
         header_args, payload = cls._read_out_header(datagram)
@@ -177,7 +177,7 @@ class ClientPackage(Package):
     '''
     Subclass of **Package** that describes packages sent by **ClientConnection**s.
 
-    ### Arguments
+    #### Arguments
      - **time_order** *int/sqn*: the clients last known time order 
     '''
     def __init__(self, sequence:int, ack:int, ack_bitfield:str, time_order:int, events:list=None):
@@ -186,10 +186,10 @@ class ClientPackage(Package):
 
     def to_datagram(self):
         '''
-        ### Returns
+        #### Returns
         *bytes*: compact bytestring representing the package, which can be sent via a datagram socket
         
-        ### Raises
+        #### Raises
          - **OverflowError**: if the resulting datagram would exceed **max_size**
         '''
         if self._datagram is not None:
@@ -207,13 +207,13 @@ class ClientPackage(Package):
     @classmethod
     def from_datagram(cls, datagram):
         '''
-        ### Arguments
+        #### Arguments
          - **datagram** *bytes*: bytestring data, typically received via a socket
         
-        ### Returns
+        #### Returns
         *Package*: the package from which the datagram has been created using `to_datagram()`
 
-        ### Raises
+        #### Raises
          - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
         '''
         header_args, payload = cls._read_out_header(datagram)
@@ -228,7 +228,7 @@ class ServerPackage(Package):
     '''
     Subclass of **Package** that describes packages sent by **ServerConnection**s.
 
-    ### Arguments
+    #### Arguments
      - **game_state_update** *GameStateUpdate*: the servers most recent minimal update for the client 
     '''
     def __init__(self, sequence:int, ack:int, ack_bitfield:str, game_state_update:GameStateUpdate, events:list=None):
@@ -237,10 +237,10 @@ class ServerPackage(Package):
 
     def to_datagram(self):
         '''
-        ### Returns
+        #### Returns
         *bytes*: compact bytestring representing the package, which can be sent via a datagram socket
         
-        ### Raises
+        #### Raises
          - **OverflowError**: if the resulting datagram would exceed **max_size**
         '''
         if self._datagram is not None:
@@ -260,13 +260,13 @@ class ServerPackage(Package):
     @classmethod
     def from_datagram(cls, datagram):
         '''
-        ### Arguments
+        #### Arguments
          - **datagram** *bytes*: bytestring data, typically received via a socket
         
-        ### Returns
+        #### Returns
         *Package*: the package from which the datagram has been created using `to_datagram()`
 
-        ### Raises
+        #### Raises
          - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
         '''
         header_args, payload = cls._read_out_header(datagram)
@@ -287,13 +287,13 @@ class Connection:
     '''
     This class resembles a client-server connection via the Pygase protocol.
 
-    ### Arguments
+    #### Arguments
      - **remote_address** *(str, int)*: A tuple `('hostname', port)` *required*
      - **event_handler**: An object that has a callable `handle()` attribute that takes
        an **Event** as argument, for example a **Pygase.event.UniversalEventHandler** instance
      - **event_wire**: object to which events are to be repeated (has to implement a *_push_event* method)
 
-    ### Attributes
+    #### Attributes
      - **remote_address** *(str, int)*: A tuple `('hostname', port)`
      - **local_sequence** *int*: sequence number of the last sent package
      - **remote_sequence** *int*: sequence number of the last received package
@@ -360,7 +360,7 @@ class Connection:
         Updates `remote_sequence` and `ack_bitfield` based on a received package, resolves package loss
         and puts the received events in the queue of incoming events.
         
-        ### Raises
+        #### Raises
          - **DuplicateSequenceError**: if a package with the same sequence has already been received
         '''
         self._last_recv = time.time()
@@ -399,10 +399,10 @@ class Connection:
 
     def dispatch_event(self, event:Event, ack_callback=None, timeout_callback=None):
         '''
-        ### Arguments
+        #### Arguments
          - **event** *Event*: the event to be sent to connection partner
         
-        ### Optional Arguments
+        #### Optional Arguments
          - **ack_callback**: function or coroutine to be executed after the event was received
          - **timeout_callback**: function or coroutine to be executed if the event was not received
         '''
@@ -500,7 +500,7 @@ class ClientConnection(Connection):
     '''
     Subclass of **Connection** that describes the client side of a Pygase connection.
 
-    ### Attributes
+    #### Attributes
      - **game_state_context** *LockedRessource*: provides thread-safe access to a *GameState* object
     '''
     def __init__(self, remote_address, event_handler):
@@ -512,7 +512,7 @@ class ClientConnection(Connection):
         '''
         Shuts down the client connection. (Can also be called as a coroutine.)
 
-        ### Optional Arguments
+        #### Optional Arguments
          - **shutdown_server** *bool*: wether or not the server should be shut down too.
             (Only has an effect if the client has host permissions.)
         '''
@@ -571,7 +571,7 @@ class ServerConnection(Connection):
     '''
     Subclass of **Connection** that describes the server side of a Pygase connection.
 
-    ### Attributes
+    #### Attributes
      - **game_state_store** *GameStateStore*: the backends **GameStateStore** that provides the state for this client
      - **last_client_time_order** *sqn*: the clients last known time order
     '''
@@ -601,7 +601,7 @@ class ServerConnection(Connection):
         '''
         Coroutine that deals with a **Server**s connections to clients.
 
-        ### Arguments
+        #### Arguments
          - **hostname** *str*: the hostname to which to bind the server socket
          - **port** *int*: the port number to which to bind the server socket
          - **server** *Server*: the **Server** for which this loop is run
