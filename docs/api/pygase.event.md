@@ -5,7 +5,7 @@ a complete set of high-level components for real-time networking for games.
 
 # pygase.event
 
-Contains the basic components of the Pygase event framework.
+Contains the basic components of the PyGaSe event framework.
 
 ## Event
 ```python

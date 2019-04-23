@@ -13,8 +13,8 @@ by any users of this library.
 Package(self, sequence:int, ack:int, ack_bitfield:str, events:list=None)
 ```
 
-A network package that implements the Pygase protocol and is created, sent, received and resolved by
-Pygase **Connections**s.
+A network package that implements the PyGaSe protocol and is created, sent, received and resolved by
+PyGaSe **Connections**s.
 
 #### Arguments
  - **sequence** *int*: sequence number of the package on its senders side of the connection
@@ -26,7 +26,7 @@ After `65535` sequence numbers wrap around to `1`, so they can be stored in 2 by
    `'1'` means the package has been received, `'0'` means it hasn't.
 
 #### Optional Arguments
- - **events** *[Event]*: list of Pygase events that is to be attached to this package and sent via network
+ - **events** *[Event]*: list of PyGaSe events that is to be attached to this package and sent via network
 
 #### Class Attributes
  - **timeout** *float*: time in seconds after which a package is considered to be lost, `1.0` by default
@@ -46,7 +46,7 @@ Package.add_event(self, event:pygase.event.Event)
 ```
 
 #### Arguments
- - **event** *Event*: a Pygase event that is to be attached to this package
+ - **event** *Event*: a PyGaSe event that is to be attached to this package
 
 #### Raises
  - **OverflowError**: if the package had previously been converted to a datagram and
@@ -83,7 +83,7 @@ Package.from_datagram(datagram:bytes)
 *Package*: the package from which the datagram has been created using `to_datagram()`
 
 #### Raises
- - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
+ - **ProtocolIDMismatchError**: if the first four bytes don't match the PyGaSe protocol ID
 
 ## ClientPackage
 ```python
@@ -118,7 +118,7 @@ ClientPackage.from_datagram(datagram)
 *Package*: the package from which the datagram has been created using `to_datagram()`
 
 #### Raises
- - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
+ - **ProtocolIDMismatchError**: if the first four bytes don't match the PyGaSe protocol ID
 
 ## ServerPackage
 ```python
@@ -153,19 +153,19 @@ ServerPackage.from_datagram(datagram)
 *Package*: the package from which the datagram has been created using `to_datagram()`
 
 #### Raises
- - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
+ - **ProtocolIDMismatchError**: if the first four bytes don't match the PyGaSe protocol ID
 
 ## Connection
 ```python
 Connection(self, remote_address:tuple, event_handler, event_wire=None)
 ```
 
-This class resembles a client-server connection via the Pygase protocol.
+This class resembles a client-server connection via the PyGaSe protocol.
 
 #### Arguments
  - **remote_address** *(str, int)*: A tuple `('hostname', port)` *required*
  - **event_handler**: An object that has a callable `handle()` attribute that takes
-   an **Event** as argument, for example a **Pygase.event.UniversalEventHandler** instance
+   an **Event** as argument, for example a **PyGaSe.event.UniversalEventHandler** instance
  - **event_wire**: object to which events are to be repeated (has to implement a *_push_event* method)
 
 #### Attributes
@@ -199,7 +199,7 @@ Connection.dispatch_event(self, event:pygase.event.Event, ack_callback=None, tim
 ClientConnection(self, remote_address, event_handler)
 ```
 
-Subclass of **Connection** that describes the client side of a Pygase connection.
+Subclass of **Connection** that describes the client side of a PyGaSe connection.
 
 #### Attributes
  - **game_state_context** *LockedRessource*: provides thread-safe access to a *GameState* object
@@ -227,7 +227,7 @@ The loop that will send and receive packages and handle events. (Can also be cal
 ServerConnection(self, remote_address:tuple, event_handler, game_state_store, last_client_time_order:pygase.utils.sqn, event_wire=None)
 ```
 
-Subclass of **Connection** that describes the server side of a Pygase connection.
+Subclass of **Connection** that describes the server side of a PyGaSe connection.
 
 #### Attributes
  - **game_state_store** *GameStateStore*: the backends **GameStateStore** that provides the state for this client

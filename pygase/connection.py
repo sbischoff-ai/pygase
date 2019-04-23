@@ -20,8 +20,8 @@ class DuplicateSequenceError(ConnectionError): pass
 
 class Package:
     '''
-    A network package that implements the Pygase protocol and is created, sent, received and resolved by
-    Pygase **Connections**s.
+    A network package that implements the PyGaSe protocol and is created, sent, received and resolved by
+    PyGaSe **Connections**s.
 
     #### Arguments
      - **sequence** *int*: sequence number of the package on its senders side of the connection
@@ -33,7 +33,7 @@ class Package:
        `'1'` means the package has been received, `'0'` means it hasn't.
 
     #### Optional Arguments
-     - **events** *[Event]*: list of Pygase events that is to be attached to this package and sent via network
+     - **events** *[Event]*: list of PyGaSe events that is to be attached to this package and sent via network
 
     #### Class Attributes
      - **timeout** *float*: time in seconds after which a package is considered to be lost, `1.0` by default
@@ -48,7 +48,7 @@ class Package:
      - **events**: iterable of **Event** objects contained in the package
     '''
     timeout = 1.0 # package timeout in seconds
-    max_size = 2048 # the maximum size of Pygase package in bytes
+    max_size = 2048 # the maximum size of PyGaSe package in bytes
     _protocol_id = bytes.fromhex('ffd0fab9') # unique 4 byte identifier for pygase packages
 
     def __init__(self, sequence:int, ack:int, ack_bitfield:str, events:list=None):
@@ -65,7 +65,7 @@ class Package:
     def add_event(self, event:Event):
         '''
         #### Arguments
-         - **event** *Event*: a Pygase event that is to be attached to this package
+         - **event** *Event*: a PyGaSe event that is to be attached to this package
         
         #### Raises
          - **OverflowError**: if the package had previously been converted to a datagram and
@@ -131,7 +131,7 @@ class Package:
         *Package*: the package from which the datagram has been created using `to_datagram()`
 
         #### Raises
-         - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
+         - **ProtocolIDMismatchError**: if the first four bytes don't match the PyGaSe protocol ID
         '''
         header_args, payload = cls._read_out_header(datagram)
         events = cls._read_out_event_block(payload)
@@ -214,7 +214,7 @@ class ClientPackage(Package):
         *Package*: the package from which the datagram has been created using `to_datagram()`
 
         #### Raises
-         - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
+         - **ProtocolIDMismatchError**: if the first four bytes don't match the PyGaSe protocol ID
         '''
         header_args, payload = cls._read_out_header(datagram)
         time_order = sqn.from_bytes(payload[:2])
@@ -267,7 +267,7 @@ class ServerPackage(Package):
         *Package*: the package from which the datagram has been created using `to_datagram()`
 
         #### Raises
-         - **ProtocolIDMismatchError**: if the first four bytes don't match the Pygase protocol ID
+         - **ProtocolIDMismatchError**: if the first four bytes don't match the PyGaSe protocol ID
         '''
         header_args, payload = cls._read_out_header(datagram)
         state_update_bytesize = int.from_bytes(payload[:2], 'big')
@@ -285,12 +285,12 @@ ConnectionStatus.register('Connecting')
 
 class Connection:
     '''
-    This class resembles a client-server connection via the Pygase protocol.
+    This class resembles a client-server connection via the PyGaSe protocol.
 
     #### Arguments
      - **remote_address** *(str, int)*: A tuple `('hostname', port)` *required*
      - **event_handler**: An object that has a callable `handle()` attribute that takes
-       an **Event** as argument, for example a **Pygase.event.UniversalEventHandler** instance
+       an **Event** as argument, for example a **PyGaSe.event.UniversalEventHandler** instance
      - **event_wire**: object to which events are to be repeated (has to implement a *_push_event* method)
 
     #### Attributes
@@ -498,7 +498,7 @@ class Connection:
 
 class ClientConnection(Connection):
     '''
-    Subclass of **Connection** that describes the client side of a Pygase connection.
+    Subclass of **Connection** that describes the client side of a PyGaSe connection.
 
     #### Attributes
      - **game_state_context** *LockedRessource*: provides thread-safe access to a *GameState* object
@@ -569,7 +569,7 @@ class ClientConnection(Connection):
 
 class ServerConnection(Connection):
     '''
-    Subclass of **Connection** that describes the server side of a Pygase connection.
+    Subclass of **Connection** that describes the server side of a PyGaSe connection.
 
     #### Attributes
      - **game_state_store** *GameStateStore*: the backends **GameStateStore** that provides the state for this client
@@ -635,7 +635,7 @@ class ServerConnection(Connection):
                         await connection_tasks.spawn(server.connections[client_address]._send_loop, sock)
                     await server.connections[client_address]._recv(package)
                 except ProtocolIDMismatchError:
-                    # ignore all non-Pygase packages
+                    # ignore all non-PyGaSe packages
                     pass
                 try:
                     if data.decode('utf-8') == 'shutdown' and client_address == server.host_client:

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 '''
-Contains the basic components of the Pygase event framework.
+Contains the basic components of the PyGaSe event framework.
 '''
 
 from curio.meta import iscoroutinefunction
