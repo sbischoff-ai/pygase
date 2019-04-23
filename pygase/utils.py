@@ -14,14 +14,19 @@ class Sendable:
 
     def to_bytes(self):
         '''
-        Packs and returns a small a binary representation of self.
+        ### Returns
+          A small binary representation of the object.
         '''
         return umsgpack.packb(self.__dict__, force_float_precision='single')
 
     @classmethod
     def from_bytes(cls, bytepack:bytes):
         '''
-        Returns a copy of the object that was packed into byte format.
+        ### Arguments
+         - **bytepack** *bytes*: the bytestring to be parsed to a **Sendable**
+
+        ### Returns
+          A copy of the object that was packed into byte format
         '''
         try:
             received_sendable = object.__new__(cls)

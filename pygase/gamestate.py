@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+'''
+Provides all PyGaSe components that deal with game states and state progression.
+'''
 
 import time
 import threading
@@ -22,23 +25,29 @@ class GameState(Sendable):
     Since it is a *Sendable*, it can only contain attributes of type `str`, `bytes`, `sqn`, `int`, `float`,
     `bool` as well as `list`s or `tuple`s of such.
 
-    *time_order* should be in alignment with the servers current update counter.
+    ### Optional Arguments
+     - **time_order** *int/sqn*: current time order number of the game state, higher means more recent
+     - **game_status** *str*: **GameStatus** enum value that basically describes whether or not the game loop is running
+     - **kwargs** *dict*: keyword arguments that describe custom game state attributes
+    
+    ### Attributes
+      **GameState** instances mainly consist of custom attributes that make up the game state
+      - **game_status** *str*: **GameStatus** enum `'Paused'` or `'Active'`
+      - **time_order** *int/sqn*: current time order number of the game state, the higher the more recent
     '''
 
-    def __init__(self, time_order=0, game_status=GameStatus.get('Paused'), **kwargs):
+    def __init__(self, time_order:int=0, game_status:str=GameStatus.get('Paused'), **kwargs):
         self.__dict__ = kwargs
         self.game_status = game_status
         self.time_order = sqn(time_order)
 
     def is_paused(self):
         '''
-        Returns *True* if game status is *Paused*.
+        ### Returns
+          `True` if game status is `'Paused'`.
         '''
         return self.game_status == GameStatus.get('Paused')
 
-    '''
-    Overrides of 'object' member functions
-    '''
     # Check time ordering
     def __lt__(self, other):
         return self.time_order < other.time_order
@@ -61,6 +70,14 @@ class GameStateUpdate(Sendable):
 
     Adding up available updates will always result in an equally or more current but
     also heavier update (meaning it will contain more data).
+
+    ### Arguments
+     - **time_order** *int/sqn*: the time order up to which the update reaches
+     - **kwargs** *dict*: the game state attributes to be updated
+    
+    ### Attributes
+    **GameStateUpdate** instances mainly consist of custom game state attributes to update.
+     - **time_order** *sqn*: the time order up to which the update reaches
     '''
 
     def __init__(self, time_order:int, **kwargs):
@@ -69,6 +86,13 @@ class GameStateUpdate(Sendable):
 
     @classmethod
     def from_bytes(cls, bytepack:bytes):
+        '''
+        ### Arguments
+         - **bytepack** *bytes*: the bytestring to be parsed to a **GameStateUpdate**
+        
+        ### Returns
+          A copy of the update that was packed into byte format
+        '''
         update = super().from_bytes(bytepack)
         update.time_order = sqn(update.time_order) # pylint: disable=no-member
         return update
@@ -113,7 +137,12 @@ def _recursive_update(d: dict, u: dict, delete=False):
             d[k] = v
 
 class GameStateStore:
+    '''
+    An interface for the part of the PyGaSe backend that provides access to the game state.
 
+    ### Optional Arguments
+     - **inital_game_state** *GameState*: state of the game before state progression begins
+    '''
     _update_cache_size = 100
 
     def __init__(self, initial_game_state:GameState=GameState()):
@@ -121,12 +150,27 @@ class GameStateStore:
         self._game_state_update_cache = [GameStateUpdate(0)]
 
     def get_update_cache(self):
+        '''
+        ### Returns
+          A list of all the recent **GameStateUpdate*s, up to the state stores cache size
+        '''
         return self._game_state_update_cache.copy()
 
     def get_game_state(self):
+        '''
+        ### Returns
+          The current game state
+        '''
         return self._game_state
 
     def push_update(self, update:GameStateUpdate):
+        '''
+        This method will usually be called by whatever is progressing the game state, usually a
+        **GameStateMachine**.
+
+        ### Arguments
+          **update** *GameStateUpdate*: a new update that is to be applied to the state
+        '''
         self._game_state_update_cache.append(update)
         if len(self._game_state_update_cache) > self._update_cache_size:
             del self._game_state_update_cache[0]
@@ -135,10 +179,18 @@ class GameStateStore:
 
 class GameStateMachine:
     '''
-    This class is meant as a base class from which you inherit and implement the `update` method.
+    A class providing the means to progress a game state through time, applying all game simulation logic.
+    This class is meant either as a base class from which you inherit and implement the `time_step` method,
+    or you assign an implementation after instantiation.
+
+    ### Arguments
+     - **game_state_store** *GameStateStore*: part of the backend that provides the state
+    
+    ### Attributes
+     - **game_time** *float*: duration the game has been running in seconds
     '''
     def __init__(self, game_state_store:GameStateStore):
-        self.game_time = 0
+        self.game_time = 0.0
         self._event_queue = curio.UniversalQueue()
         self._universal_event_handler = UniversalEventHandler()
         self._game_state_store = game_state_store
@@ -153,12 +205,25 @@ class GameStateMachine:
 
     def push_event_handler(self, event_type:str, handler_func):
         '''
-        handler_func gets passed the keyword argument `game_state` along with those attached
-        to the event and is expected to return an update dict.
+        For event handlers to have any effect, the events have to be wired from a **Server** to the
+        **GameStateMachine**.
+
+        ### Arguments
+         - **event_type** *str*: event type to link the handler function to
+         - **handler_func**: function or coroutine to be invoked for events of the given type,
+            gets passed the keyword argument `game_state` (along with those attached
+            to the event) and is expected to return an update dict
         '''
         self._universal_event_handler.push_event_handler(event_type, handler_func)
 
     def run_game_loop(self, interval:float=0.02):
+        '''
+        Runs the simulation that progresses the game state through time. (Can also be called as a coroutine.)
+        As long as the simulation is running, the **GameStatus** will be `'Active'`.
+
+        ### Arguments
+         - **interval** *float*: (minimum) duration in seconds between consecutive time steps
+        '''
         curio.run(self.run_game_loop, interval)
 
     @awaitable(run_game_loop)
@@ -190,11 +255,24 @@ class GameStateMachine:
         self._game_loop_is_running = False
 
     def run_game_loop_in_thread(self, interval:float=0.02):
+        '''
+        Simulate the game in a seperate thread.
+
+        See **GameStateMachine.run_game_loop(interval)**.
+
+        ### Returns
+        *threading.Thread*: the thread the game loop runs in
+        '''
         thread = threading.Thread(target=self.run_game_loop, args=(interval,))
         thread.start()
         return thread
 
     def stop(self, timeout:float=1.0):
+        '''
+        Stops the game simulation, setting its **GameStatus** to `'Paused'`. (Can also be called as a coroutine.)
+
+        A subsequent call of `run_game_loop` will resume the simulation at the point where it was stopped.
+        '''
         return curio.run(self.stop, timeout)
 
     @awaitable(stop)
@@ -216,5 +294,12 @@ class GameStateMachine:
     def time_step(self, game_state:GameState, dt):
         '''
         This method should be implemented to return a dict with all the updated state attributes.
+
+        ### Arguments
+         - **game_state** *GameState*: the state of the game prior to the time step
+         - **dt** *float*: time in seconds since the last time step, use it to simulate at a consistent speed
+        
+        ### Returns
+          A dict with all the game state attributes that have to be updated due to the time step
         '''
         raise NotImplementedError()
