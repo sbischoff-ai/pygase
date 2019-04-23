@@ -4,7 +4,7 @@ import time
 
 import curio
 from curio import socket
-from curio.meta import awaitable
+from curio.meta import awaitable, iscoroutinefunction
 
 from pygase.utils import Sendable, NamedEnum, sqn, LockedRessource
 from pygase.event import Event
@@ -357,7 +357,10 @@ class Connection:
                 if pending_sequence in self._events_with_callbacks:
                     for event_sequence in self._events_with_callbacks[pending_sequence]:
                         if self._event_callbacks[event_sequence]['ack'] is not None:
-                            self._event_callbacks[event_sequence]['ack']()
+                            if iscoroutinefunction(self._event_callbacks[event_sequence]['ack']):
+                                await self._event_callbacks[event_sequence]['ack']()
+                            else:
+                                self._event_callbacks[event_sequence]['ack']()
                             del self._event_callbacks[event_sequence]
                     del self._events_with_callbacks[pending_sequence]
                 del self._pending_acks[pending_sequence]
@@ -365,7 +368,10 @@ class Connection:
                 if pending_sequence in self._events_with_callbacks:
                     for event_sequence in self._events_with_callbacks[pending_sequence]:
                         if self._event_callbacks[event_sequence]['timeout'] is not None:
-                            self._event_callbacks[event_sequence]['timeout']()
+                            if iscoroutinefunction(self._event_callbacks[event_sequence]['timeout']):
+                                await self._event_callbacks[event_sequence]['timeout']()
+                            else:
+                                self._event_callbacks[event_sequence]['timeout']()
                             del self._event_callbacks[event_sequence]
                     del self._events_with_callbacks[pending_sequence]
                 del self._pending_acks[pending_sequence]
