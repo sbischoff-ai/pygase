@@ -24,7 +24,7 @@ steps:
   displayName: 'Install dependencies'
 
 - script: |
-    poetry run pylint pygase
+    poetry run pylint-fail-under --fail_under 9.9 pygase
   displayName: 'pylint'
 
 - script: |

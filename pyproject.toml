@@ -35,6 +35,7 @@ freezegun = "^0.3.11"
 pytest-cov = "^2.6"
 mypy = "^0.701.0"
 pydoc-markdown = "^2.0"
+pylint-fail-under = "^0.1.0"
 
 [tool.black]
 line-length = 119
