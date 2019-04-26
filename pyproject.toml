@@ -33,6 +33,8 @@ pylint = "^2.3"
 black = {version = "^18.3-alpha.0",allows-prereleases = true}
 freezegun = "^0.3.11"
 pytest-cov = "^2.6"
+mypy = "^0.701.0"
+pydoc-markdown = "^2.0"
 
 [tool.black]
 line-length = 119

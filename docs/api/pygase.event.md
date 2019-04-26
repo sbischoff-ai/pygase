@@ -4,65 +4,65 @@ PyGaSe, or Python Game Service, is a library (or framework, whichever name you p
 a complete set of high-level components for real-time networking for games.
 
 # pygase.event
+Handle events in PyGaSe clients, servers and state machines.
 
 Contains the basic components of the PyGaSe event framework.
 
+
 ## Event
 ```python
-Event(self, event_type:str, handler_args:list=[], handler_kwargs:dict={})
+Event(self, event_type:str, *args, **kwargs)
 ```
+Send PyGaSe events and attached data via UDP packages.
 
 #### Arguments
- - **event_type** *str*: string that identifies the event and links it to a handler
+ - `event_type`: string that identifies the event and links it to a handler
 
 #### Optional Arguments
- - **handler_args** *list*: list of positional arguments to be passed to the handler function that will be invoked
-   on the other side of the connection
- - **handler_kwargs** *dict*: dict of keyword arguments to be passed to the handler function
+Additional positional arguments represent event data and will be passed to the handler function
+on the other side of the connection.
+
+#### Keyword Arguments
+keyword arguments to be passed to the handler function on the other side of the connection
 
 #### Attributes
- - **type** *str*
- - **handler_args** *list*
- - **handler_kwargs** *dict*
+ - `type`
+ - `handler_args`
+ - `handler_kwargs`
+
 
 ## UniversalEventHandler
 ```python
 UniversalEventHandler(self)
 ```
-
-Deals with event handling and is usually part of a PyGaSe connection.
-
-### push_event_handler
+Handle PyGaSe events with callback functions.
+### register_event_handler
 ```python
-UniversalEventHandler.push_event_handler(self, event_type:str, event_handler_function)
+UniversalEventHandler.register_event_handler(self, event_type:str, event_handler_function) -> None
 ```
+Register an event handler for a specific event type.
 
 #### Arguments
- - **event_type** *str*: string that identifies the events to be handles by this function
- - **event_handler_function**: callbackfunction that will be invoked with the handler args
-   and kwargs with which the incoming event has been dispatched (can also be a coroutine)
+ - `event_type`: string that identifies the events to be handled by this function
+ - `event_handler_function`: callback function or coroutine that will be invoked with the handler args
+   and kwargs with which the incoming event has been dispatched
+
 
 ### handle
 ```python
 UniversalEventHandler.handle(self, event:pygase.event.Event, **kwargs)
 ```
-
-calls the appropriate handler function
+Invoke the appropriate handler function.
 
 #### Arguments
- - **event** *Event*: the event to be handled
+ - `event`: the event to be handled
 
-#### Optional Arguments
- - **kwargs** *dict*: additional keyword arguments to be passed to the handler function
+#### Keyword Arguments
+keyword arguments to be passed to the handler function (in addition to those already attached to the event)
 
-### has_type
+
+### has_event_type
 ```python
-UniversalEventHandler.has_type(self, event_type:str)
+UniversalEventHandler.has_event_type(self, event_type:str) -> bool
 ```
-
-#### Arguments
- - **event_type** *str*: event type for which to check
-
-#### Returns
- `True` if a handler has been pushed for the given event type, `False` otherwise
-
+Check if a handler was registered for `event_type`.

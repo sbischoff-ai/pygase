@@ -64,8 +64,8 @@ def time_step(game_state, dt):
     return {}
         
 game_state_machine.time_step = time_step
-game_state_machine.push_event_handler(event_type='JOIN', handler_func=on_join)
-game_state_machine.push_event_handler(event_type='MOVE', handler_func=on_move)
+game_state_machine.push_event_handler(event_type='JOIN', event_handler_function=on_join)
+game_state_machine.push_event_handler(event_type='MOVE', event_handler_function=on_move)
 
 server = Server(game_state_store)
 

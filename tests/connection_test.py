@@ -5,22 +5,22 @@ from freezegun import freeze_time
 import curio
 from curio import socket
 
-from pygase.utils import sqn
+from pygase.utils import Sqn
 from pygase.event import Event
 from pygase.gamestate import GameStateUpdate
-from pygase.connection import Package, ClientPackage, ServerPackage, \
+from pygase.connection import Header, Package, ClientPackage, ServerPackage, \
     Connection, DuplicateSequenceError, ProtocolIDMismatchError
 
 class TestPackage:
 
     def test_bytepacking(self):
-        package = Package(4, 5, '10'*16, [Event('TEST', ['Foo', 'Bar'])])
+        package = Package(Header(4, 5, '10'*16), [Event('TEST', 'Foo', 'Bar')])
         datagram = package.to_datagram()
         unpacked_package = Package.from_datagram(datagram)
         assert package == unpacked_package
 
     def test_protocol_ID_check(self):
-        package = Package(1, 2, '0'*32)
+        package = Package(Header(1, 2, '0'*32))
         datagram = package.to_datagram()
         datagram = datagram[1:]
         with pytest.raises(ProtocolIDMismatchError):
@@ -28,25 +28,25 @@ class TestPackage:
 
     def test_size_restriction(self):
         with pytest.raises(OverflowError) as error:
-            Package(1, 4, '0'*32, [Event('TEST', [bytes(2048-13)])]).to_datagram()
-        assert str(error.value) == 'package exceeds the maximum size of 2048 bytes'
+            Package(Header(1, 4, '0'*32), [Event('TEST', bytes(2048-13))]).to_datagram()
+        assert str(error.value) == 'Package exceeds the maximum size of 2048 bytes.'
 
     def test_add_event(self):
-        package = Package(1, 2, '0'*32)
-        event1 = Event('TEST', [1,2,3])
-        event2 = Event('FOO', ['Bar'])
+        package = Package(Header(1, 2, '0'*32))
+        event1 = Event('TEST', 1, 2, 3)
+        event2 = Event('FOO', 'Bar')
         package.add_event(event1)
         package.add_event(event2)
         assert len(package.events) == 2
         assert event1 in package.events and event2 in package.events
         with pytest.raises(OverflowError):
             package.get_bytesize()
-            package.add_event(Event('BIG', [bytes(2030)]))
+            package.add_event(Event('BIG', bytes(2030)))
 
 class TestClientPackage:
 
     def test_bytepacking(self):
-        package = ClientPackage(4, 5, '10'*16, 1, [Event('TEST', ['Foo', 'Bar'])])
+        package = ClientPackage(Header(4, 5, '10'*16), 1, [Event('TEST', 'Foo', 'Bar')])
         datagram = package.to_datagram()
         unpacked_package = ClientPackage.from_datagram(datagram)
         assert package == unpacked_package
@@ -54,7 +54,7 @@ class TestClientPackage:
 class TestServerPackage:
 
     def test_bytepacking(self):
-        package = ServerPackage(4, 5, '10'*16, GameStateUpdate(2), [Event('TEST', ['Foo', 'Bar'])])
+        package = ServerPackage(Header(4, 5, '10'*16), GameStateUpdate(2), [Event('TEST', 'Foo', 'Bar')])
         datagram = package.to_datagram()
         unpacked_package = ServerPackage.from_datagram(datagram)
         assert package == unpacked_package
@@ -66,16 +66,16 @@ class TestConnection:
         assert connection.local_sequence == 0
         assert connection.remote_sequence == 0
         assert connection.ack_bitfield == '0'*32
-        curio.run(connection._recv, Package(sequence=1, ack=0, ack_bitfield='0'*32))
+        curio.run(connection._recv, Package(Header(sequence=1, ack=0, ack_bitfield='0'*32)))
         assert connection.local_sequence == 0
         assert connection.remote_sequence == 1
         assert connection.ack_bitfield == '0'*32
 
     def test_recv_second_package(self):
         connection = Connection(('host', 1234), None)
-        connection.remote_sequence = sqn(1)
+        connection.remote_sequence = Sqn(1)
         connection.ack_bitfield = '0'*32
-        curio.run(connection._recv, Package(sequence=2, ack=1, ack_bitfield='0'*32))
+        curio.run(connection._recv, Package(Header(sequence=2, ack=1, ack_bitfield='0'*32)))
         assert connection.remote_sequence == 2
         assert connection.ack_bitfield == '1' + '0'*31
 
@@ -83,46 +83,46 @@ class TestConnection:
         connection = Connection(('host', 1234), None)
         assert connection.remote_sequence == 0
         assert connection.ack_bitfield == '0'*32
-        curio.run(connection._recv, Package(sequence=2, ack=0, ack_bitfield='0'*32))
+        curio.run(connection._recv, Package(Header(sequence=2, ack=0, ack_bitfield='0'*32)))
         assert connection.remote_sequence == 2
         assert connection.ack_bitfield == '0'*32
 
     def test_recv_first_package_comes_second(self):
         connection = Connection(('host', 1234), None)
-        connection.remote_sequence = sqn(2)
+        connection.remote_sequence = Sqn(2)
         connection.ack_bitfield = '0'*32
-        curio.run(connection._recv, Package(sequence=1, ack=1, ack_bitfield='0'*32))
+        curio.run(connection._recv, Package(Header(sequence=1, ack=1, ack_bitfield='0'*32)))
         assert connection.remote_sequence == 2
         assert connection.ack_bitfield == '1' + '0'*31
 
     def test_recv_three_packages_arrive_out_of_sequence(self):
         connection = Connection(('host', 1234), None)
-        connection.remote_sequence = sqn(100)
+        connection.remote_sequence = Sqn(100)
         connection.ack_bitfield = '0110' + '1'*28
-        curio.run(connection._recv, Package(sequence=101, ack=100, ack_bitfield='1'*32))
+        curio.run(connection._recv, Package(Header(sequence=101, ack=100, ack_bitfield='1'*32)))
         assert connection.remote_sequence == 101
         assert connection.ack_bitfield == '10110' + '1'*27
-        curio.run(connection._recv, Package(sequence=99, ack=100, ack_bitfield='1'*32))
+        curio.run(connection._recv, Package(Header(sequence=99, ack=100, ack_bitfield='1'*32)))
         assert connection.remote_sequence == 101
         assert connection.ack_bitfield == '11110' + '1'*27
-        curio.run(connection._recv, Package(sequence=96, ack=101, ack_bitfield='1'*32))
+        curio.run(connection._recv, Package(Header(sequence=96, ack=101, ack_bitfield='1'*32)))
         assert connection.remote_sequence == 101
         assert connection.ack_bitfield == '1'*32
 
     def test_recv_duplicate_package_in_sequence(self):
         connection = Connection(('host', 1234), None)
-        connection.remote_sequence = sqn(500)
+        connection.remote_sequence = Sqn(500)
         connection.ack_bitfield = '1'*32
-        curio.run(connection._recv, Package(sequence=501, ack=500, ack_bitfield='1'*32))
+        curio.run(connection._recv, Package(Header(sequence=501, ack=500, ack_bitfield='1'*32)))
         with pytest.raises(DuplicateSequenceError):
-            curio.run(connection._recv(Package(sequence=501, ack=500, ack_bitfield='1'*32)))
+            curio.run(connection._recv(Package(Header(sequence=501, ack=500, ack_bitfield='1'*32))))
 
     def test_recv_duplicate_package_out_of_sequence(self):
         connection = Connection(('host', 1234), None)
-        connection.remote_sequence = sqn(1000)
+        connection.remote_sequence = Sqn(1000)
         connection.ack_bitfield = '1'*32
         with pytest.raises(DuplicateSequenceError):
-            curio.run(connection._recv, Package(sequence=990, ack=500, ack_bitfield='1'*32))
+            curio.run(connection._recv, Package(Header(sequence=990, ack=500, ack_bitfield='1'*32)))
 
     def test_congestion_avoidance(self):
         connection = Connection(('', 1234), None)
@@ -133,27 +133,27 @@ class TestConnection:
         }
         assert connection.quality == 'good'
         assert connection.latency == 0.0
-        assert connection.package_interval == Connection._package_intervals['good']
+        assert connection._package_interval == Connection._package_intervals['good']
         t = Connection.min_throttle_time
         connection._throttling_state_machine(t, state)
         assert connection.quality == 'good'
-        assert connection.package_interval == Connection._package_intervals['good']
+        assert connection._package_interval == Connection._package_intervals['good']
         connection.latency = Connection._latency_threshold + 0.01
         t +=  Connection.min_throttle_time
         connection._throttling_state_machine(t, state)
         assert connection.quality == 'bad'
-        assert connection.package_interval == Connection._package_intervals['bad']
+        assert connection._package_interval == Connection._package_intervals['bad']
         assert state['throttle_time'] == Connection.min_throttle_time
         connection.latency = Connection._latency_threshold - 0.01
         t += Connection.min_throttle_time/2.0
         connection._throttling_state_machine(t, state)
         assert connection.quality == 'good'
-        assert connection.package_interval == Connection._package_intervals['bad']
+        assert connection._package_interval == Connection._package_intervals['bad']
         assert state['throttle_time'] == Connection.min_throttle_time
         t += 1.1*Connection.min_throttle_time
         connection._throttling_state_machine(t, state)
         assert connection.quality == 'good'
-        assert connection.package_interval == Connection._package_intervals['good']
+        assert connection._package_interval == Connection._package_intervals['good']
         assert state['throttle_time'] == Connection.min_throttle_time
         connection.latency = Connection._latency_threshold + 0.01
         t += Connection.min_throttle_time/2.0
@@ -165,7 +165,7 @@ class TestConnection:
         t += Connection.min_throttle_time/2.0
         connection._throttling_state_machine(t, state)
         assert connection.quality == 'bad'
-        assert connection.package_interval == Connection._package_intervals['bad']
+        assert connection._package_interval == Connection._package_intervals['bad']
         assert state['throttle_time'] == 2.0*Connection.min_throttle_time
         connection.latency = Connection._latency_threshold - 0.01
         t += Connection.min_throttle_time/2.0
@@ -173,7 +173,7 @@ class TestConnection:
         t += 2.1*Connection.min_throttle_time
         connection._throttling_state_machine(t, state)
         assert connection.quality == 'good'
-        assert connection.package_interval == Connection._package_intervals['good']
+        assert connection._package_interval == Connection._package_intervals['good']
         assert state['throttle_time'] == Connection.min_throttle_time
 
     def test_send_package(self):
@@ -185,19 +185,19 @@ class TestConnection:
         curio.run(connection._send_next_package, send_socket)
         data = curio.run(recv_socket.recv, Package.max_size)
         package = Package.from_datagram(data)
-        assert package.sequence == 1 and connection.local_sequence == 1
-        assert package.ack == 0 and package.ack_bitfield == '0'*32
+        assert package.header.sequence == 1 and connection.local_sequence == 1
+        assert package.header.ack == 0 and package.header.ack_bitfield == '0'*32
         curio.run(connection._send_next_package, send_socket)
         data = curio.run(recv_socket.recv, Package.max_size)
         package = Package.from_datagram(data)
-        assert package.sequence == 2 and connection.local_sequence == 2
-        assert package.ack == 0 and package.ack_bitfield == '0'*32
-        connection.local_sequence = sqn.get_max_sequence()
+        assert package.header.sequence == 2 and connection.local_sequence == 2
+        assert package.header.ack == 0 and package.header.ack_bitfield == '0'*32
+        connection.local_sequence = Sqn.get_max_sequence()
         curio.run(connection._send_next_package, send_socket)
         data = curio.run(recv_socket.recv, Package.max_size)
         package = Package.from_datagram(data)
-        assert package.sequence == 1 and connection.local_sequence == 1
-        assert package.ack == 0 and package.ack_bitfield == '0'*32
+        assert package.header.sequence == 1 and connection.local_sequence == 1
+        assert package.header.ack == 0 and package.header.ack_bitfield == '0'*32
         curio.run(send_socket.close)
         curio.run(recv_socket.close)
 
@@ -208,15 +208,15 @@ class TestConnection:
         curio.run(connection._send_next_package, sock)
         assert connection._pending_acks.keys() == {1}
         assert connection.latency == 0
-        curio.run(connection._recv, Package(1, 0, '0'*32))
+        curio.run(connection._recv, Package(Header(1, 0, '0'*32)))
         assert connection._pending_acks
-        curio.run(connection._recv, Package(2, 1, '0'*32))
+        curio.run(connection._recv, Package(Header(2, 1, '0'*32)))
         assert not connection._pending_acks
         assert connection.latency > 0
         for _ in range(1, 5):
             curio.run(connection._send_next_package, sock)
         assert connection._pending_acks.keys() == {2,3,4,5}
-        curio.run(connection._recv, Package(3, 4, '01'+'0'*30))
+        curio.run(connection._recv, Package(Header(3, 4, '01'+'0'*30)))
         assert connection._pending_acks.keys() == {3,5}
 
     def test_package_timeout(self):
@@ -228,7 +228,7 @@ class TestConnection:
             assert connection._pending_acks.keys() == {1}
             frozen_time.tick()
             frozen_time.tick()
-            curio.run(connection._recv, Package(1, 0, '0'*32))
+            curio.run(connection._recv, Package(Header(1, 0, '0'*32)))
             assert not connection._pending_acks
             assert connection.latency == 0
 
@@ -237,7 +237,7 @@ class TestConnection:
         recv_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         recv_socket.bind(('localhost', 0))
         connection = Connection(recv_socket.getsockname(), None)
-        event = Event('TEST', [1,2,3,4])
+        event = Event('TEST', 1, 2, 3, 4)
         connection.dispatch_event(event)
         curio.run(connection._send_next_package, send_socket)
         data = curio.run(recv_socket.recv, Package.max_size)
@@ -253,8 +253,8 @@ class TestConnection:
         recv_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         recv_socket.bind(('localhost', 0))
         connection = Connection(recv_socket.getsockname(), None)
-        event = Event('TEST', [1,2,3,4])
-        another_event = Event('TEST', [3,4,5,6])
+        event = Event('TEST', 1, 2, 3, 4)
+        another_event = Event('TEST', 3, 4, 5, 6)
         connection.dispatch_event(event)
         connection.dispatch_event(another_event)
         curio.run(connection._send_next_package, send_socket)
@@ -270,13 +270,13 @@ class TestConnection:
             async def handle(self, event, **kwargs):
                 EventHandler.call_count += 1
                 self.events.append(event)
-            def has_type(self, event_type):
+            def has_event_type(self, event_type):
                 return True
         event_handler = EventHandler()
         connection = Connection(('', 0), event_handler)
         assert connection.event_handler == event_handler
-        event = Event('TEST', [1,2,3,4])
-        package = Package(1, 1, '1'*32, [event, event])
+        event = Event('TEST', 1, 2, 3, 4)
+        package = Package(Header(1, 1, '1'*32), [event, event])
         assert package.events == [event, event]
         assert connection.remote_sequence == 0
         curio.run(connection._recv, package)
@@ -298,19 +298,19 @@ class TestConnection:
             count = 0
             def __init__(self): callback.count += 1
         connection = Connection(('', 0), None)
-        event = Event('TEST', [])
+        event = Event('TEST')
         connection.dispatch_event(event, ack_callback=callback)
         curio.run(connection._send_next_package, sock)
-        curio.run(connection._recv, Package(1,1,'0'*32))
+        curio.run(connection._recv, Package(Header(1,1,'0'*32)))
         assert callback.count == 1
-        curio.run(connection._recv, Package(2,1,'0'*32))
+        curio.run(connection._recv, Package(Header(2,1,'0'*32)))
         assert callback.count == 1
         connection.dispatch_event(event, ack_callback=callback)
         connection.dispatch_event(event)
         connection.dispatch_event(event, ack_callback=callback)
         curio.run(connection._send_next_package, sock)
         assert connection.local_sequence == 2
-        curio.run(connection._recv, Package(3,2,'1'+'0'*31))
+        curio.run(connection._recv, Package(Header(3,2,'1'+'0'*31)))
         assert callback.count == 3
 
     def test_event_timeout_calbacks(self):
@@ -321,18 +321,18 @@ class TestConnection:
             def __init__(self): callback.count += 1
         with freeze_time("2012-01-14 12:00:01") as frozen_time:
             connection = Connection(('', 0), None)
-            event = Event('TEST', [])
+            event = Event('TEST')
             connection.dispatch_event(event, timeout_callback=callback)
             curio.run(connection._send_next_package, sock)
-            curio.run(connection._recv, Package(1,1,'0'*32))
+            curio.run(connection._recv, Package(Header(1,1,'0'*32)))
             assert callback.count == 0
             frozen_time.tick()
             frozen_time.tick()
-            curio.run(connection._recv, Package(2,1,'0'*32))
+            curio.run(connection._recv, Package(Header(2,1,'0'*32)))
             assert callback.count == 0
             connection.dispatch_event(event, timeout_callback=callback)
             curio.run(connection._send_next_package, sock)
             frozen_time.tick()
             frozen_time.tick()
-            curio.run(connection._recv, Package(3,1,'0'*32))
+            curio.run(connection._recv, Package(Header(3,1,'0'*32)))
             assert callback.count == 1

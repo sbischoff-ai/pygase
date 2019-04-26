@@ -10,7 +10,7 @@ from pygase.client import Client
 from pygase.gamestate import GameStateMachine, GameStateStore, GameState, GameStatus
 
 class TestIntegration:
-    
+
     def test_client_server_connection(self):
         server = Server(GameStateStore())
         client = Client()

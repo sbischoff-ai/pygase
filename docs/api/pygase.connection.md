@@ -4,246 +4,317 @@ PyGaSe, or Python Game Service, is a library (or framework, whichever name you p
 a complete set of high-level components for real-time networking for games.
 
 # pygase.connection
+Provide low-level networking logic.
 
-This module contains the low-level network logic of PyGaSe and is not supposed to be required
-by any users of this library.
+This module is not supposed to be required by users of this library.
+
+
+## ProtocolIDMismatchError
+```python
+ProtocolIDMismatchError(self, /, *args, **kwargs)
+```
+Bytestring could not be identified as a valid PyGaSe package.
+## DuplicateSequenceError
+```python
+DuplicateSequenceError(self, /, *args, **kwargs)
+```
+Received a package with a sequence number that was already received before.
+## Header
+```python
+Header(self, sequence:int, ack:int, ack_bitfield:str)
+```
+Create a PyGaSe package header.
+
+#### Arguments
+ - `sequence`: package sequence number
+ - `ack`: sequence number of the last received package
+ - `ack_bitfield`: A 32 character string representing the 32 sequence numbers prior to the last one received,
+    with the first character corresponding the packge directly preceding it and so forth.
+    '1' means that package has been received, '0' means it hasn't.
+
+#### Attributes
+ - `sequence`
+ - `ack`
+ - `ack_bitfield`
+
+---
+Sequence numbers: A sequence of 0 means no packages have been sent or received.
+After 65535 sequence numbers wrap around to 1, so they can be stored in 2 bytes.
+
+
+### to_bytearray
+```python
+Header.to_bytearray(self) -> bytearray
+```
+Return 12 bytes representing the header.
+### destructure
+```python
+Header.destructure(self) -> tuple
+```
+Return the tuple `(sequence, ack, ack_bitfield)`.
+### deconstruct_datagram
+```python
+Header.deconstruct_datagram(datagram:bytes) -> tuple
+```
+Return a tuple containing the header and the rest of the datagram.
+
+#### Arguments
+ - `datagram`: serialized PyGaSe package to deconstruct
+
+#### Returns
+`(header, payload)` with `payload` being a bytestring of the rest of the datagram
+
 
 ## Package
 ```python
-Package(self, sequence:int, ack:int, ack_bitfield:str, events:list=None)
+Package(self, header:pygase.connection.Header, events:list=None)
 ```
-
-A network package that implements the PyGaSe protocol and is created, sent, received and resolved by
-PyGaSe **Connections**s.
+Create a UDP package implementing the PyGaSe protocol.
 
 #### Arguments
- - **sequence** *int*: sequence number of the package on its senders side of the connection
- - **ack** *int*: sequence number of the last received package from the recipients side of the connection
-A sequence of `0` means no packages have been sent or received.
-After `65535` sequence numbers wrap around to `1`, so they can be stored in 2 bytes.
- - **ack_bitfield** *str*: A 32 character string representing the 32 packages prior to `remote_sequence`,
-   with the first character corresponding the packge directly preceding it and so forth.
-   `'1'` means the package has been received, `'0'` means it hasn't.
+ - `header`: package header as `Header` object
 
 #### Optional Arguments
- - **events** *[Event]*: list of PyGaSe events that is to be attached to this package and sent via network
+ - `events`: list of PyGaSe `Event` objects to attach to this package
 
 #### Class Attributes
- - **timeout** *float*: time in seconds after which a package is considered to be lost, `1.0` by default
- - **max_size** *int*: maximum size in bytes a package may have, `2048` by default
+ - `timeout`: time in seconds after which a package is considered to be lost, 1.0 by default
+ - `max_size`: maximum datagram size in bytes, 2048 by default
 
 #### Attributes
- - **sequence** *sqn*: packages sequence number
- - **ack** *sqn*: last received remote sequence number
- - **ack_bitfield** *str*: acknowledgement status of 32 preceding remote sequence numbers as boolean bitstring
+ - `header`
 
 #### Properties
- - **events**: iterable of **Event** objects contained in the package
+ - `events`: list of `Event` objects contained in the package
+
+---
+PyGaSe servers and clients use the subclasses `ServerPackage` and `ClientPackage` respectively.
+`Package` would also work on its own (it's not an 'abstract' class), in which case you would have
+all features of PyGaSe except for a synchronized game state.
+
+
+
+### events
+Get a list of the events in the package.
 
 ### add_event
 ```python
-Package.add_event(self, event:pygase.event.Event)
+Package.add_event(self, event:pygase.event.Event) -> None
 ```
+Add a PyGaSe event to the package.
 
 #### Arguments
- - **event** *Event*: a PyGaSe event that is to be attached to this package
+ - `event`: the `Event` object to attach to this package
 
 #### Raises
- - **OverflowError**: if the package had previously been converted to a datagram and
-   and its size with the added event would exceed **max_size**
+ - `OverflowError` if the package has previously been converted to a datagram and
+   and its size with the added event would exceed `max_size`
+
 
 ### get_bytesize
 ```python
-Package.get_bytesize(self)
+Package.get_bytesize(self) -> int
 ```
-
-#### Returns
-*int*: size of the package as a datagram in bytes
-
+Return the size in bytes the package has as a datagram.
 ### to_datagram
 ```python
-Package.to_datagram(self)
+Package.to_datagram(self) -> bytes
 ```
-
-#### Returns
-*bytes*: compact bytestring representing the package, which can be sent via a datagram socket
+Return package compactly serialized to `bytes`.
 
 #### Raises
- - **OverflowError**: if the resulting datagram would exceed **max_size**
+ - `OverflowError` if the resulting datagram would exceed `max_size`
+
 
 ### from_datagram
 ```python
-Package.from_datagram(datagram:bytes)
+Package.from_datagram(datagram:bytes) -> 'Package'
 ```
+Deserialize datagram to `Package`.
 
 #### Arguments
- - **datagram** *bytes*: bytestring data, typically received via a socket
+ - `datagram`: bytestring to deserialize, typically received via network
 
 #### Returns
-*Package*: the package from which the datagram has been created using `to_datagram()`
+`Package` object
 
 #### Raises
- - **ProtocolIDMismatchError**: if the first four bytes don't match the PyGaSe protocol ID
+ - `ProtocolIDMismatchError` if the first four bytes don't match the PyGaSe protocol ID
+
 
 ## ClientPackage
 ```python
-ClientPackage(self, sequence:int, ack:int, ack_bitfield:str, time_order:int, events:list=None)
+ClientPackage(self, header:pygase.connection.Header, time_order:int, events:list=None)
 ```
-
-Subclass of **Package** that describes packages sent by **ClientConnection**s.
+Subclass of `Package` for packages sent by PyGaSe clients.
 
 #### Arguments
- - **time_order** *int/sqn*: the clients last known time order
+ - `time_order`: the clients last known time order of the game state
+
+#### Attributes
+ - `time_order`
+
 
 ### to_datagram
 ```python
-ClientPackage.to_datagram(self)
+ClientPackage.to_datagram(self) -> bytes
 ```
-
-#### Returns
-*bytes*: compact bytestring representing the package, which can be sent via a datagram socket
-
-#### Raises
- - **OverflowError**: if the resulting datagram would exceed **max_size**
-
+Override `Package.to_datagram` to include `time_order`.
 ### from_datagram
 ```python
-ClientPackage.from_datagram(datagram)
+ClientPackage.from_datagram(datagram:bytes) -> 'ClientPackage'
 ```
-
-#### Arguments
- - **datagram** *bytes*: bytestring data, typically received via a socket
-
-#### Returns
-*Package*: the package from which the datagram has been created using `to_datagram()`
-
-#### Raises
- - **ProtocolIDMismatchError**: if the first four bytes don't match the PyGaSe protocol ID
-
+Override `Package.from_datagram` to include `time_order`.
 ## ServerPackage
 ```python
-ServerPackage(self, sequence:int, ack:int, ack_bitfield:str, game_state_update:pygase.gamestate.GameStateUpdate, events:list=None)
+ServerPackage(self, header:pygase.connection.Header, game_state_update:pygase.gamestate.GameStateUpdate, events:list=None)
 ```
-
-Subclass of **Package** that describes packages sent by **ServerConnection**s.
+Subclass of `Package` for packages sent by PyGaSe servers.
 
 #### Arguments
- - **game_state_update** *GameStateUpdate*: the servers most recent minimal update for the client
+ - `game_state_update`: the servers most recent minimal update for the client
+
 
 ### to_datagram
 ```python
-ServerPackage.to_datagram(self)
+ServerPackage.to_datagram(self) -> bytes
 ```
-
-#### Returns
-*bytes*: compact bytestring representing the package, which can be sent via a datagram socket
-
-#### Raises
- - **OverflowError**: if the resulting datagram would exceed **max_size**
-
+Override `Package.to_datagram` to include `game_state_update`.
 ### from_datagram
 ```python
-ServerPackage.from_datagram(datagram)
+ServerPackage.from_datagram(datagram:bytes) -> 'ServerPackage'
+```
+Override `Package.from_datagram` to include `game_state_update`.
+## ConnectionStatus
+```python
+ConnectionStatus(self, /, *args, **kwargs)
 ```
 
-#### Arguments
- - **datagram** *bytes*: bytestring data, typically received via a socket
+Enum for the state of a connection:
+ - `'Disconnected'`
+ - `'Connecting'`
+ - `'Connected'`
 
-#### Returns
-*Package*: the package from which the datagram has been created using `to_datagram()`
-
-#### Raises
- - **ProtocolIDMismatchError**: if the first four bytes don't match the PyGaSe protocol ID
 
 ## Connection
 ```python
 Connection(self, remote_address:tuple, event_handler, event_wire=None)
 ```
+Exchange packages between PyGaSe clients and servers.
 
-This class resembles a client-server connection via the PyGaSe protocol.
+PyGaSe connections exchange events with their other side which are handled using custom handler functions.
+They also keep each other informed about which packages have been sent and received and automatically avoid
+network congestion.
 
 #### Arguments
- - **remote_address** *(str, int)*: A tuple `('hostname', port)` *required*
- - **event_handler**: An object that has a callable `handle()` attribute that takes
-   an **Event** as argument, for example a **PyGaSe.event.UniversalEventHandler** instance
- - **event_wire**: object to which events are to be repeated (has to implement a *_push_event* method)
+ - `remote_address`: tuple `('hostname', port)` for the connection partner's address
+ - `event_handler`: object that has a callable `handle` attribute that takes
+    an `Event` as argument, for example a `PyGaSe.event.UniversalEventHandler` instance
+ - `event_wire`: object to which events are to be repeated
+    (has to implement a `_push_event` method like `pygase.GameStateMachine`)
 
 #### Attributes
- - **remote_address** *(str, int)*: A tuple `('hostname', port)`
- - **local_sequence** *int*: sequence number of the last sent package
- - **remote_sequence** *int*: sequence number of the last received package
-A sequence of `0` means no packages have been sent or received.
-After `65535` sequence numbers wrap around to `1`, so they can be stored in 2 bytes.
- - **ack_bitfield** *str*: A 32 character string representing the 32 packages prior to `remote_sequence`,
-    with the first character corresponding the packge directly preceding it and so forth.
-    `'1'` means the package has been received, `'0'` means it hasn't.
- - **latency**: the last registered RTT (round trip time)
- - **status** *int*: A **ConnectionStatus** value.
- - **quality** *str*: Either `'good'` or `'bad'`, depending on latency. Is used internally for
-    congestion avoidance.
+ - `remote_address`
+ - `event_handler`
+ - `event_wire`
+ - `local_sequence`: sequence number of the last sent package
+ - `remote_sequence`: sequence number of the last received package
+ - `ack_bitfield`: acks for the 32 packages prior to `remote_sequence`
+ - `latency`: the last registered RTT (round trip time)
+ - `status`: a `ConnectionStatus` value that informs about the state of the connections
+ - `quality`: either `'good'` or `'bad'` depending on latency, used internally for
+    congestion avoidance
+
+---
+PyGaSe servers and clients use the subclasses `ServerConnection` and `ClientConnection` respectively.
+`Connection` would also work on its own (it's not an 'abstract' class), in which case you would have
+all features of PyGaSe except for a synchronized game state.
 
 ### dispatch_event
 ```python
 Connection.dispatch_event(self, event:pygase.event.Event, ack_callback=None, timeout_callback=None)
 ```
+Send an event to the connection partner.
 
 #### Arguments
- - **event** *Event*: the event to be sent to connection partner
+ - `event`: the event to dispatch
 
 #### Optional Arguments
- - **ack_callback**: function or coroutine to be executed after the event was received
- - **timeout_callback**: function or coroutine to be executed if the event was not received
+ - `ack_callback`: function or coroutine to be executed after the event was received
+ - `timeout_callback`: function or coroutine to be executed if the event was not received
+
+---
+Using long-running blocking operations in any of the callback functions can disturb the connection.
+
 
 ## ClientConnection
 ```python
-ClientConnection(self, remote_address, event_handler)
+ClientConnection(self, remote_address:tuple, event_handler)
 ```
+Subclass of `Connection` to describe the client side of a PyGaSe connection.
 
-Subclass of **Connection** that describes the client side of a PyGaSe connection.
+Client connections hold a copy of the game state which is continously being updated according to
+state updates received from the server.
 
 #### Attributes
- - **game_state_context** *LockedRessource*: provides thread-safe access to a *GameState* object
+ - `game_state_context`: provides thread-safe access to a `GameState` object
+
 
 ### shutdown
 ```python
 ClientConnection.shutdown(self, shutdown_server:bool=False)
 ```
+Shut down the client connection.
 
-Shuts down the client connection. (Can also be called as a coroutine.)
+This method can also be spawned as a coroutine.
 
 #### Optional Arguments
- - **shutdown_server** *bool*: wether or not the server should be shut down too.
-    (Only has an effect if the client has host permissions.)
+ - `shutdown_server`: wether or not the server should be shut down too
+    (only has an effect if the client has host permissions)
+
 
 ### loop
 ```python
 ClientConnection.loop(self)
 ```
+Continously operate the connection.
 
-The loop that will send and receive packages and handle events. (Can also be called as a coroutine.)
+This method will keep sending and receiving packages and handling events until it is cancelled or
+the connection receives a shutdown command. It can also be spawned as a coroutine.
+
 
 ## ServerConnection
 ```python
-ServerConnection(self, remote_address:tuple, event_handler, game_state_store, last_client_time_order:pygase.utils.sqn, event_wire=None)
+ServerConnection(self, remote_address:tuple, event_handler, game_state_store, last_client_time_order:pygase.utils.Sqn, event_wire=None)
 ```
+Subclass of `Connection` that describes the server side of a PyGaSe connection.
 
-Subclass of **Connection** that describes the server side of a PyGaSe connection.
+#### Arguments
+ - `game_state_store`: object that serves as an interface to the game state repository
+    (has to provide the methods `get_gamestate`, `get_update_cache` and `push_update`like `pygase.GameStateStore`)
+ - `last_client_time_order`: the last time order number known to the client
 
 #### Attributes
- - **game_state_store** *GameStateStore*: the backends **GameStateStore** that provides the state for this client
- - **last_client_time_order** *sqn*: the clients last known time order
+ - `game_state_store`
+ - `last_client_time_order`
+
 
 ### loop
 ```python
-ServerConnection.loop(hostname:str, port:int, server, event_wire)
+ServerConnection.loop(hostname:str, port:int, server, event_wire) -> None
 ```
+Continously orchestrate and operate connections to clients.
 
-Coroutine that deals with a **Server**s connections to clients.
+This coroutine will keep listening for client packages, create new `ServerConnection` objects
+when necessary and make sure all packages are handled by and sent via the right connection.
+
+It will return as soon as the server receives a shutdown message.
 
 #### Arguments
- - **hostname** *str*: the hostname to which to bind the server socket
- - **port** *int*: the port number to which to bind the server socket
- - **server** *Server*: the **Server** for which this loop is run
- - **event_wire**: object to which events are to be repeated
-   (has to implement a *_push_event* method and is typically a **GameStateMachine**)
+ - `hostname`: the hostname to which to bind the server socket
+ - `port`: the port number to which to bind the server socket
+ - `server`: the `pygase.Server` for which this loop is run
+ - `event_wire`: object to which events are to be repeated
+   (has to implement a `_push_event` method and is typically a `pygase.GameStateMachine`)
+
 
