@@ -37,6 +37,7 @@ mypy = "^0.701.0"
 pydoc-markdown = "^2.0"
 pylint-fail-under = "^0.1.0"
 pre-commit = "^1.15"
+pygame = "^1.9"
 
 [tool.black]
 line-length = 119
