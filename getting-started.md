@@ -25,7 +25,7 @@ import math
 
 def time_step(game_state, dt):
     # Make the imaginary enemy move in sinuous lines like a drunkard.
-    new_position = game_state.position += math.sin(dt)
+    new_position = game_state.position + math.sin(dt)
     return {"position": new_position}
 ```
 The `time_step` function represents one iteration of the game loop and takes the current `game_state` as an argument,
@@ -61,7 +61,7 @@ initial_game_state = GameState(position=0, hp=100)
 
 def time_step(game_state, dt):
     # Make the imaginary enemy move in sinuous lines like a drunkard.
-    new_position = game_state.position += math.sin(dt)
+    new_position = game_state.position + math.sin(dt)
     return {"position": new_position}
 
 backend = Backend(initial_game_state, time_step)
@@ -75,8 +75,8 @@ To interact with it we could connect a client in an interactive python session i
 ```python
 >>> from pygase import Client
 >>> client = Client()
->>> client.connect_in_thread(port=8080) # hostname="localhost" is default
-<Thread(Thread-1, started 24096)> # returns the corresponding thread
+>>> client.connect_in_thread(port=8080)
+<Thread(Thread-1, started 24096)>
 >>> with client.access_game_state() as game_state:
 ...   print(game_state.position)
 ...   print(game_state.hp)
@@ -126,19 +126,19 @@ Having extended the backend like this we can now restart it and try out the even
 >>> client.dispatch_event("ATTACK", attack_position=0.5)
 >>> with client.access_game_state() as game_state:
 ...   print(game_state.position)
-...   print(game_state.hp) # Check if we hit.
+...   print(game_state.hp)
 ... 
 -0.1760756199485871
 100
 >>> client.dispatch_event("ATTACK", attack_position=0.5)
 >>> with client.access_game_state() as game_state:
-...   print(game_state.hp) # Check again ...
+...   print(game_state.hp)
 ... 
 100
 >>> client.dispatch_event("ATTACK", attack_position=0.5)
 >>> client.dispatch_event("ATTACK", attack_position=0.5)
 >>> with client.access_game_state() as game_state:
-...   print(game_state.hp) # ... and again.
+...   print(game_state.hp)
 ... 
 90
 >>> 
@@ -254,7 +254,7 @@ initial_game_state = GameState(position=0, hp=100)
 # Define what happens in an iteration of the game loop.
 def time_step(game_state, dt):
     # Make the imaginary enemy move in sinuous lines like a drunkard.
-    new_position = game_state.position += math.sin(dt)
+    new_position = game_state.position + math.sin(dt)
     return {"position": new_position}
 
 # Create the backend.
