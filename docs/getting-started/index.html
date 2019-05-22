@@ -514,7 +514,7 @@ In this case our game state resembles the dict <code>{"position": 0.0, "hp": 100
 
 def time_step(game_state, dt):
     # Make the imaginary enemy move in sinuous lines like a drunkard.
-    new_position = game_state.position += math.sin(dt)
+    new_position = game_state.position + math.sin(dt)
     return {&quot;position&quot;: new_position}
 </code></pre>
 
@@ -546,7 +546,7 @@ initial_game_state = GameState(position=0, hp=100)
 
 def time_step(game_state, dt):
     # Make the imaginary enemy move in sinuous lines like a drunkard.
-    new_position = game_state.position += math.sin(dt)
+    new_position = game_state.position + math.sin(dt)
     return {&quot;position&quot;: new_position}
 
 backend = Backend(initial_game_state, time_step)
@@ -558,8 +558,8 @@ backend.run('localhost', 8080)
 To interact with it we could connect a client in an interactive python session in another console window:</p>
 <pre><code class="python">&gt;&gt;&gt; from pygase import Client
 &gt;&gt;&gt; client = Client()
-&gt;&gt;&gt; client.connect_in_thread(port=8080) # hostname=&quot;localhost&quot; is default
-&lt;Thread(Thread-1, started 24096)&gt; # returns the corresponding thread
+&gt;&gt;&gt; client.connect_in_thread(port=8080)
+&lt;Thread(Thread-1, started 24096)&gt;
 &gt;&gt;&gt; with client.access_game_state() as game_state:
 ...   print(game_state.position)
 ...   print(game_state.hp)
@@ -606,19 +606,19 @@ to the event by the client.</p>
 <pre><code class="python">&gt;&gt;&gt; client.dispatch_event(&quot;ATTACK&quot;, attack_position=0.5)
 &gt;&gt;&gt; with client.access_game_state() as game_state:
 ...   print(game_state.position)
-...   print(game_state.hp) # Check if we hit.
+...   print(game_state.hp)
 ... 
 -0.1760756199485871
 100
 &gt;&gt;&gt; client.dispatch_event(&quot;ATTACK&quot;, attack_position=0.5)
 &gt;&gt;&gt; with client.access_game_state() as game_state:
-...   print(game_state.hp) # Check again ...
+...   print(game_state.hp)
 ... 
 100
 &gt;&gt;&gt; client.dispatch_event(&quot;ATTACK&quot;, attack_position=0.5)
 &gt;&gt;&gt; client.dispatch_event(&quot;ATTACK&quot;, attack_position=0.5)
 &gt;&gt;&gt; with client.access_game_state() as game_state:
-...   print(game_state.hp) # ... and again.
+...   print(game_state.hp)
 ... 
 90
 &gt;&gt;&gt; 
@@ -722,7 +722,7 @@ initial_game_state = GameState(position=0, hp=100)
 # Define what happens in an iteration of the game loop.
 def time_step(game_state, dt):
     # Make the imaginary enemy move in sinuous lines like a drunkard.
-    new_position = game_state.position += math.sin(dt)
+    new_position = game_state.position + math.sin(dt)
     return {&quot;position&quot;: new_position}
 
 # Create the backend.
