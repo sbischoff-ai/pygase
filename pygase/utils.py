@@ -4,7 +4,7 @@
 Provides utilities used in PyGaSe code or helpful to users of this library.
 
 ### Contents
-- #Comparable: mixin that makes object compare as equal if their type and attributes match
+- #Comparable: mixin that makes objects compare as equal if their type and attributes match
 - #Sendable: mixin that allows to serialize objects to small bytestrings
 - #NamedEnum: base class for lists of strings to be mapped to integer values
 - #Sqn: subclass of `int` for sequence numbers that always fit in 2 bytes
