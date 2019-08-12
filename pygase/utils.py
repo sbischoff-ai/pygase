@@ -86,13 +86,13 @@ class NamedEnum:
         '''
 
 
-        MyEnum.register("foo")
-        MyEnum.register("bar")
+    MyEnum.register("foo")
+    MyEnum.register("bar")
 
-        assert MyEnum.get("foo") == 1
-        assert MyEnum.get("bar") == 2
-        assert MyEnum.get(1) == "foo"
-        assert MyEnum.get(2) == "bar"
+    assert MyEnum.get("foo") == 1
+    assert MyEnum.get("bar") == 2
+    assert MyEnum.get(1) == "foo"
+    assert MyEnum.get(2) == "bar"
     ```
 
     """
