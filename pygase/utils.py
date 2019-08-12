@@ -42,7 +42,7 @@ class Sendable(Comparable):
     This mixin for classes that are supposed to be sendable as part of a PyGaSe package makes
     objects serializable with the msgpack protocol.
     Sendables can only have attributes of type `str`, `bytes`, `Sqn`, `int`, `float`, `bool`
-    as well as `list`s or `tuple`s of such.
+    as well as `dict`s, `list`s or `tuple`s of such.
 
     """
 
