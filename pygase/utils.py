@@ -328,6 +328,6 @@ def get_available_ip_addresses() -> list[str]:
     detected_addresses: list[str] = []
     for adapter in ifaddr.get_adapters():
         for ip_addr in adapter.ips:
-            if ip_addr.is_IPv4 and ip_addr.ip[:3] in {"10.", "172", "192", "127"}:
+            if isinstance(ip_addr.ip, str) and ip_addr.is_IPv4 and ip_addr.ip[:3] in {"10.", "172", "192", "127"}:
                 detected_addresses.append(ip_addr.ip)
     return detected_addresses
