@@ -1,6 +1,4 @@
-[![Build Status](https://dev.azure.com/pxlbrain/pygase/_apis/build/status/sbischoff-ai.pygase?branchName=master)](https://dev.azure.com/pxlbrain/pygase/_build/latest?definitionId=2&branchName=master)
-![Azure DevOps tests (branch)](https://img.shields.io/azure-devops/tests/pxlbrain/pygase/2/master.svg)
-![Azure DevOps coverage (branch)](https://img.shields.io/azure-devops/coverage/pxlbrain/pygase/2/master.svg)
+[![CI](https://github.com/sbischoff-ai/pygase/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/sbischoff-ai/pygase/actions/workflows/ci.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 ![PyPI](https://img.shields.io/pypi/v/pygase.svg)
 # PyGaSe
