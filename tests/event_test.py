@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import pytest
-import curio
+from pygase import aio
 
 from pygase.event import Event, UniversalEventHandler
 
@@ -22,10 +22,10 @@ class TestEvent:
         assert not handler.has_event_type("FOO")
         handler.register_event_handler("FOO", on_foo)
         assert handler.has_event_type("FOO")
-        curio.run(handler.handle, Event("FOO", "baz"))
+        aio.run(handler.handle, Event("FOO", "baz"))
         assert "baz" in testlist
         handler.register_event_handler("BAR", lambda: testlist.pop())
-        assert curio.run(handler.handle, Event("BAR")) == "baz"
+        assert aio.run(handler.handle, Event("BAR")) == "baz"
         assert not testlist
 
     def test_asynchronous_event_handler_with_kwarg(self):
@@ -36,7 +36,7 @@ class TestEvent:
             testlist.append(bar)
 
         handler.register_event_handler("FOO", on_foo)
-        curio.run(handler.handle, Event("FOO", bar="bizbaz"))
+        aio.run(handler.handle, Event("FOO", bar="bizbaz"))
         assert "bizbaz" in testlist
 
     def test_register_nonsense(self):

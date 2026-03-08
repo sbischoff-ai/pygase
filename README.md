@@ -6,11 +6,11 @@
 # PyGaSe
 **Py**thon **Ga**me **Se**rver
 
-A package for Python 3.6+ that contains a game-ready client-server architecture and UDP-based network protocol.
+A package for Python 3.12+ that contains a game-ready client-server architecture and UDP-based network protocol.
 
 It deals with problems such as package loss or network congestion so you don't have to. Instead it gives you
 a high-level API to easily connect clients and backends that share a synchronized game state and exchange events.
-The async framework for this one is [curio](https://github.com/dabeaz/curio), which I highly recommend.
+The async framework for this one is Python's built-in [asyncio](https://docs.python.org/3/library/asyncio.html).
 
 PyGaSe is built to be easy to use, lightweight, fast, scalable and reliable.
 You can build a fast-paced real-time online game with this.
@@ -28,7 +28,7 @@ I'm actively developing PyGaSe in the context of several Indie game projects and
 ```
 pip install pygase
 ```
-or better yet `poetry add pygase`. Seriously, use [poetry](https://github.com/sdispater/poetry), it's a revelation.
+or better yet `uv add pygase`.
 
 ## Usage
 

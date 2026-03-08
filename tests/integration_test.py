@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import curio
+from pygase import aio
 from freezegun import freeze_time
 
 from helpers import assert_timeout
@@ -16,16 +16,16 @@ class TestIntegration:
         client = Client()
 
         async def test_task():
-            await curio.spawn(server.run)
+            await aio.spawn(server.run)
             await assert_timeout(1, lambda: server.port is not None)
-            await curio.spawn(client.connect, server.port)
+            await aio.spawn(client.connect, server.port)
             await assert_timeout(1, lambda: server.connections != {})
             assert client.connection.remote_address == (server.hostname, server.port)
-            await curio.sleep(0)
+            await aio.sleep(0)
             await server.shutdown()
             return True
 
-        assert curio.run(test_task)
+        assert aio.run(test_task)
 
     def test_connect_disconnect(self):
         init_gamestate = GameState(counter=0, test="foobar")
@@ -42,11 +42,11 @@ class TestIntegration:
         client = Client()
 
         async def test_task(client_shutdown):
-            server_task = await curio.spawn(server.run)
+            server_task = await aio.spawn(server.run)
             await assert_timeout(1, lambda: server._port is not None)
-            client_task = await curio.spawn(client.connect, server.port, server.hostname)
+            client_task = await aio.spawn(client.connect, server.port, server.hostname)
             await assert_timeout(1, lambda: client.connection is not None)
-            state_machine_task = await curio.spawn(state_machine.run_game_loop)
+            state_machine_task = await aio.spawn(state_machine.run_game_loop)
             await assert_timeout(1, lambda: state_store.get_game_state().game_status == GameStatus.get("Active"))
             await state_machine.stop()
             await state_machine_task.join()
@@ -57,5 +57,5 @@ class TestIntegration:
             await server_task.join()
             return True
 
-        assert curio.run(test_task, True, with_monitor=True)
-        assert curio.run(test_task, False, with_monitor=True)
+        assert aio.run(test_task, True, with_monitor=True)
+        assert aio.run(test_task, False, with_monitor=True)

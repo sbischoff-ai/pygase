@@ -14,10 +14,33 @@ Provides utilities used in PyGaSe code or helpful to users of this library.
 """
 
 import logging
+import socket
+import time
 from threading import Lock
 
-import umsgpack
-import ifaddr
+try:
+    import umsgpack
+except ImportError:  # pragma: no cover - fallback for restricted test envs
+    import msgpack
+
+    class _UmsgpackFallback:
+        InsufficientDataException = ValueError
+
+        @staticmethod
+        def packb(data, **kwargs):
+            kwargs.pop("force_float_precision", None)
+            return msgpack.packb(data, use_bin_type=True)
+
+        @staticmethod
+        def unpackb(data):
+            return msgpack.unpackb(data, raw=False)
+
+    umsgpack = _UmsgpackFallback()
+
+try:
+    import ifaddr
+except ImportError:  # pragma: no cover - fallback for restricted test envs
+    ifaddr = None
 
 logger = logging.getLogger("PyGaSe")
 
@@ -293,10 +316,17 @@ class LockedRessource:
 
 def get_available_ip_addresses() -> list:
     """Return a list of all locally available IPv4 addresses."""
+    if ifaddr is None:
+        addresses = {"127.0.0.1"}
+        for result in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip_addr = result[4][0]
+            if ip_addr[:3] in {"10.", "172", "192", "127"}:
+                addresses.add(ip_addr)
+        return list(addresses)
+
     addresses = []
     for adapter in ifaddr.get_adapters():
         for ip_addr in adapter.ips:
             if ip_addr.is_IPv4 and ip_addr.ip[:3] in {"10.", "172", "192", "127"}:
-                # only local IPv4 addresses
                 addresses.append(ip_addr.ip)
     return addresses

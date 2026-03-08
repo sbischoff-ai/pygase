@@ -1,12 +1,11 @@
-[tool.poetry]
+[project]
 name = "pygase"
 version = "0.3.1"
 description = "game-ready client-server architecture and UDP-based network protocol - built to be easy to use, lightweight, fast, scalable and reliable"
-authors = ["Silas Bischoff <silas.bischoff@googlemail.com>"]
-license = "MIT"
 readme = "README.md"
-repository = "https://github.com/sbischoff-ai/pygase"
-homepage = "https://sbischoff-ai.github.io/pygase/"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Silas Bischoff", email = "silas.bischoff@googlemail.com" }]
 keywords = ["client", "server", "real-time", "network", "games"]
 classifiers = [
     "Operating System :: Microsoft :: Windows",
@@ -19,35 +18,41 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Networking",
     "Intended Audience :: Developers",
-    "Development Status :: 4 - Beta"
+    "Development Status :: 4 - Beta",
 ]
-packages = [{ include = "pygase" }]
+dependencies = [
+    "ifaddr>=0.2.0",
+    "u-msgpack-python>=2.8.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.6"
-curio = "^0.9.0"
-ifaddr = "^0.1.6"
-u-msgpack-python = "^2.5"
+[project.urls]
+Repository = "https://github.com/sbischoff-ai/pygase"
+Homepage = "https://sbischoff-ai.github.io/pygase/"
 
-[tool.poetry.dev-dependencies]
-pytest = "^4.4"
-pylint = "^2.3"
-black = {version = "^18.3-alpha.0",allows-prereleases = true}
-freezegun = "^0.3.11"
-pytest-cov = "^2.6"
-mypy = "^0.701.0"
-pydoc-markdown = "^2.0"
-pylint-fail-under = "^0.1.0"
-pre-commit = "^1.15"
-pygame = "^1.9"
-pydocstyle = "^3.0"
-mkdocs-material = "^4.2"
-pygments = "^2.4"
+[dependency-groups]
+dev = [
+    "black>=24.0.0",
+    "freezegun>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mypy>=1.10.0",
+    "pre-commit>=3.0.0",
+    "pydoc-markdown>=4.8.0",
+    "pydocstyle>=6.3.0",
+    "pygame>=2.6.0",
+    "pygments>=2.18.0",
+    "pylint>=3.2.0",
+    "pylint-fail-under>=0.3.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
 
 [tool.black]
 line-length = 119
-target_version = ['py36']
+target-version = ["py312"]
 
-[build-system]
-requires = ["poetry>=0.12"]
-build-backend = "poetry.masonry.api"
+[tool.uv]
+default-groups = ["dev"]
