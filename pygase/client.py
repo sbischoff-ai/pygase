@@ -9,8 +9,8 @@
 import time
 import threading
 
-import curio
-from curio.meta import awaitable
+from pygase import aio
+from pygase.aio import awaitable
 
 from pygase.connection import ClientConnection
 from pygase.event import UniversalEventHandler, Event
@@ -56,7 +56,7 @@ class Client:
 
         """
         self.connection = ClientConnection((hostname, port), self._universal_event_handler)
-        curio.run(self.connection.loop)
+        aio.run(self.connection.loop)
 
     @awaitable(connect)
     async def connect(self, port: int, hostname: str = "localhost") -> None:  # pylint: disable=function-redefined
@@ -74,7 +74,7 @@ class Client:
 
         """
         self.connection = ClientConnection((hostname, port), self._universal_event_handler)
-        thread = threading.Thread(target=curio.run, args=(self.connection.loop,))
+        thread = threading.Thread(target=aio.run, args=(self.connection.loop,))
         thread.start()
         return thread
 

@@ -20,9 +20,8 @@ This module is not supposed to be required by users of this library.
 
 import time
 
-import curio
-from curio import socket
-from curio.meta import awaitable, iscoroutinefunction
+from pygase import aio
+from pygase.aio import socket, awaitable, iscoroutinefunction
 
 from pygase.utils import NamedEnum, Sqn, LockedRessource, Comparable, logger
 from pygase.event import Event
@@ -369,8 +368,8 @@ class Connection:
         self.status = ConnectionStatus.get("Disconnected")
         self.quality = "good"  # this is used for congestion avoidance
         self._package_interval = self._package_intervals["good"]
-        self._outgoing_event_queue = curio.UniversalQueue()
-        self._incoming_event_queue = curio.UniversalQueue()
+        self._outgoing_event_queue = aio.UniversalQueue()
+        self._incoming_event_queue = aio.UniversalQueue()
         self._pending_acks: dict = {}
         self._event_callback_sequence = Sqn(0)
         self._events_with_callbacks: dict = {}
@@ -495,7 +494,7 @@ class Connection:
         while True:
             try:
                 await self._handle_next_event()
-            except curio.CancelledError:
+            except aio.CancelledError:
                 break
         logger.debug(f"Stopped handling events from {self.remote_address}.")
 
@@ -506,11 +505,11 @@ class Connection:
         cancelled or the connection times out.
 
         # Arguments
-        sock (curio.io.Socket): socket via which to send the packages
+        sock (aio.io.Socket): socket via which to send the packages
 
         """
         logger.debug(f"Starting to send packages to {self.remote_address} every {self._package_interval} seconds.")
-        congestion_avoidance_task = await curio.spawn(self._congestion_avoidance_monitor)
+        congestion_avoidance_task = await aio.spawn(self._congestion_avoidance_monitor)
         while True:
             try:
                 t0 = time.time()
@@ -519,8 +518,8 @@ class Connection:
                     self._set_status("Disconnected")
                     break
                 await self._send_next_package(sock)
-                await curio.sleep(max([self._package_interval - time.time() + t0, 0]))
-            except curio.CancelledError:
+                await aio.sleep(max([self._package_interval - time.time() + t0, 0]))
+            except aio.CancelledError:
                 break
         logger.debug(f"Stopped sending packages to {self.remote_address}.")
         await congestion_avoidance_task.cancel()
@@ -535,7 +534,7 @@ class Connection:
         This coroutine returns once the package is sent.
 
         # Arguments
-        sock (curio.io.Socket): socket via which to send the package
+        sock (aio.io.Socket): socket via which to send the package
 
         """
         self.local_sequence += 1
@@ -588,8 +587,8 @@ class Connection:
         while True:
             try:
                 self._throttling_state_machine(time.time(), state)
-                await curio.sleep(self._min_throttle_time / 2.0)
-            except curio.CancelledError:
+                await aio.sleep(self._min_throttle_time / 2.0)
+            except aio.CancelledError:
                 break
         logger.debug(f"Stopped congestion avoidance for connection to {self.remote_address}.")
 
@@ -645,7 +644,7 @@ class ClientConnection(Connection):
 
     def __init__(self, remote_address: tuple, event_handler):
         super().__init__(remote_address, event_handler)
-        self._command_queue = curio.UniversalQueue()
+        self._command_queue = aio.UniversalQueue()
         self.game_state_context = LockedRessource(GameState())
 
     def shutdown(self, shutdown_server: bool = False):
@@ -658,7 +657,7 @@ class ClientConnection(Connection):
             (only has an effect if the client has host permissions)
 
         """
-        curio.run(self.shutdown, shutdown_server)
+        aio.run(self.shutdown, shutdown_server)
 
     @awaitable(shutdown)
     async def shutdown(self, shutdown_server: bool = False):  # pylint: disable=function-redefined
@@ -686,7 +685,7 @@ class ClientConnection(Connection):
         the connection receives a shutdown command. It can also be spawned as a coroutine.
 
         """
-        curio.run(self.loop)
+        aio.run(self.loop)
 
     @awaitable(loop)
     async def loop(self):  # pylint: disable=function-redefined
@@ -694,9 +693,9 @@ class ClientConnection(Connection):
         logger.info(f"Trying to connect to server ...")
         self._set_status("Connecting")
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            send_loop_task = await curio.spawn(self._send_loop, sock)
-            recv_loop_task = await curio.spawn(self._client_recv_loop, sock)
-            event_loop_task = await curio.spawn(self._event_loop)
+            send_loop_task = await aio.spawn(self._send_loop, sock)
+            recv_loop_task = await aio.spawn(self._client_recv_loop, sock)
+            event_loop_task = await aio.spawn(self._event_loop)
             # check for disconnect event
             while not self.status == ConnectionStatus.get("Disconnected"):
                 command = await self._command_queue.get()
@@ -715,7 +714,7 @@ class ClientConnection(Connection):
     async def _recv(self, package: ServerPackage):
         """Extend #Connection._recv to update the game state."""
         await super()._recv(package)
-        async with curio.abide(self.game_state_context.lock):
+        async with aio.abide(self.game_state_context.lock):
             logger.debug(
                 (
                     f"Updating game state from time order "
@@ -732,18 +731,18 @@ class ClientConnection(Connection):
         cancelled.
 
         # Arguments
-        sock (curio.io.Socket): socket with which to receive server packages
+        sock (aio.io.Socket): socket with which to receive server packages
 
         """
         while self.local_sequence == 0:
-            await curio.sleep(0)
+            await aio.sleep(0)
         logger.debug(f"Starting to listen to packages from server at {self.remote_address}.")
         while True:
             try:
                 data = await sock.recv(ServerPackage._max_size)  # pylint: disable=protected-access
                 package = ServerPackage.from_datagram(data)
                 await self._recv(package)
-            except curio.CancelledError:
+            except aio.CancelledError:
                 break
         logger.debug(f"Stopped receiving packages from {self.remote_address}.")
 
@@ -816,7 +815,7 @@ class ServerConnection(Connection):
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind((hostname, port))
             server._hostname, server._port = sock.getsockname()  # pylint: disable=protected-access
-            connection_tasks = curio.TaskGroup()
+            connection_tasks = aio.TaskGroup()
             logger.info(f"Server successfully started and listening to packages from clients on {(hostname, port)}.")
             while True:
                 data, client_address = await sock.recvfrom(Package._max_size)  # pylint: disable=protected-access

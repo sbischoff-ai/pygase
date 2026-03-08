@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import curio
+from pygase import aio
 from freezegun import freeze_time
 import pytest
 
@@ -22,13 +22,13 @@ class TestServer:
         server = Server(GameStateStore())
 
         async def test_task():
-            await curio.spawn(server.run, 1234)
+            await aio.spawn(server.run, 1234)
             await assert_timeout(1, lambda: server.hostname == "localhost")
             assert server._port == 1234
             await server.shutdown()
             return True
 
-        assert curio.run(test_task)
+        assert aio.run(test_task)
 
     def test_dispatch_event(self):
         server = Server(GameStateStore())
@@ -120,15 +120,15 @@ class TestGameStateMachine:
 
         async def test_task():
             with freeze_time() as frozen_time:
-                game_loop = await curio.spawn(state_machine.run_game_loop, 1)
+                game_loop = await aio.spawn(state_machine.run_game_loop, 1)
                 for _ in range(10):
                     frozen_time.tick()
-                    await curio.sleep(0)
+                    await aio.sleep(0)
                 await state_machine.stop()
                 await game_loop.join()
             return True
 
-        assert curio.run(test_task)
+        assert aio.run(test_task)
         assert store.get_game_state().time_order == 12
         assert store.get_game_state().test == 10
         assert state_machine.game_time == 10

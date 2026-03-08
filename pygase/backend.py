@@ -14,9 +14,8 @@ Provides the `Server` class and all PyGaSe components that deal with progression
 import time
 import threading
 
-import curio
-from curio import socket
-from curio.meta import awaitable
+from pygase import aio
+from pygase.aio import socket, awaitable
 
 from pygase.connection import ServerConnection
 from pygase.gamestate import GameState, GameStateUpdate, GameStatus
@@ -121,7 +120,7 @@ class Server:
            (has to implement a `_push_event(event)` method and is typically a #GameStateMachine)
 
         """
-        curio.run(self.run, port, hostname, event_wire)
+        aio.run(self.run, port, hostname, event_wire)
 
     @awaitable(run)
     async def run(  # pylint: disable=function-redefined
@@ -170,7 +169,7 @@ class Server:
         This method can also be spawned as a coroutine.
 
         """
-        curio.run(self.shutdown)
+        aio.run(self.shutdown)
 
     @awaitable(shutdown)
     async def shutdown(self) -> None:  # pylint: disable=function-redefined
@@ -255,7 +254,7 @@ class GameStateMachine:
     def __init__(self, game_state_store: GameStateStore):
         logger.debug("Creating GameStateMachine instance.")
         self.game_time: float = 0.0
-        self._event_queue = curio.UniversalQueue()
+        self._event_queue = aio.UniversalQueue()
         self._universal_event_handler = UniversalEventHandler()
         self._game_state_store = game_state_store
         self._game_loop_is_running = False
@@ -309,7 +308,7 @@ class GameStateMachine:
         interval (float): (minimum) duration in seconds between consecutive time steps
 
         """
-        curio.run(self.run_game_loop, interval)
+        aio.run(self.run_game_loop, interval)
 
     @awaitable(run_game_loop)
     async def run_game_loop(self, interval: float = 0.02) -> None:  # pylint: disable=function-redefined
@@ -336,7 +335,7 @@ class GameStateMachine:
             self._game_state_store.push_update(GameStateUpdate(game_state.time_order + 1, **update_dict))
             game_state = self._game_state_store.get_game_state()
             dt = max(interval, time.time() - t0)
-            await curio.sleep(max(0, interval - dt))
+            await aio.sleep(max(0, interval - dt))
             self.game_time += dt
         logger.info("Game loop stopped.")
         self._game_loop_is_running = False
@@ -368,7 +367,7 @@ class GameStateMachine:
         bool: wether or not the simulation was successfully stopped
 
         """
-        return curio.run(self.stop, timeout)
+        return aio.run(self.stop, timeout)
 
     @awaitable(stop)
     async def stop(self, timeout: float = 1.0) -> bool:  # pylint: disable=function-redefined
@@ -384,7 +383,7 @@ class GameStateMachine:
         while self._game_loop_is_running:
             if time.time() - t0 > timeout:
                 break
-            await curio.sleep(0)
+            await aio.sleep(0)
         return not self._game_loop_is_running
 
     def time_step(self, game_state: GameState, dt: float) -> dict:

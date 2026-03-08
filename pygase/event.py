@@ -9,7 +9,7 @@ Contains the basic components of the PyGaSe event framework.
 
 """
 
-from curio.meta import iscoroutinefunction
+from pygase.aio import iscoroutinefunction
 
 from pygase.utils import Sendable, logger
 
