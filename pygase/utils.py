@@ -15,8 +15,8 @@ Provides utilities used in PyGaSe code or helpful to users of this library.
 
 import logging
 import socket
-import time
 from threading import Lock
+from typing import Any
 
 try:
     import umsgpack
@@ -298,7 +298,7 @@ class LockedRessource:
 
     """
 
-    def __init__(self, ressource):
+    def __init__(self, ressource: Any) -> None:
         self.lock: Lock = Lock()
         self.ressource = ressource
 
@@ -314,19 +314,20 @@ class LockedRessource:
         logger.debug(f"Released lock for {self.ressource}.")
 
 
-def get_available_ip_addresses() -> list:
+def get_available_ip_addresses() -> list[str]:
     """Return a list of all locally available IPv4 addresses."""
     if ifaddr is None:
-        addresses = {"127.0.0.1"}
-        for result in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+        addresses: set[str] = {"127.0.0.1"}
+        addr_infos: list[tuple[Any, ...]] = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)
+        for result in addr_infos:
             ip_addr = result[4][0]
-            if ip_addr[:3] in {"10.", "172", "192", "127"}:
+            if isinstance(ip_addr, str) and ip_addr[:3] in {"10.", "172", "192", "127"}:
                 addresses.add(ip_addr)
         return list(addresses)
 
-    addresses = []
+    detected_addresses: list[str] = []
     for adapter in ifaddr.get_adapters():
         for ip_addr in adapter.ips:
             if ip_addr.is_IPv4 and ip_addr.ip[:3] in {"10.", "172", "192", "127"}:
-                addresses.append(ip_addr.ip)
-    return addresses
+                detected_addresses.append(ip_addr.ip)
+    return detected_addresses

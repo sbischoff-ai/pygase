@@ -56,3 +56,30 @@ target-version = ["py312"]
 
 [tool.uv]
 default-groups = ["dev"]
+
+[tool.pylint.main]
+py-version = "3.12"
+
+[tool.pylint."messages control"]
+disable = [
+    "duplicate-code",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    "missing-module-docstring",
+    "too-few-public-methods",
+]
+
+[tool.pydocstyle]
+convention = "google"
+add-ignore = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    "D203",
+    "D401",
+]

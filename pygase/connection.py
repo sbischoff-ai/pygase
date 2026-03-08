@@ -690,7 +690,7 @@ class ClientConnection(Connection):
     @awaitable(loop)
     async def loop(self):  # pylint: disable=function-redefined
         # pylint: disable=missing-docstring
-        logger.info(f"Trying to connect to server ...")
+        logger.info("Trying to connect to server ...")
         self._set_status("Connecting")
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             send_loop_task = await aio.spawn(self._send_loop, sock)
@@ -822,7 +822,7 @@ class ServerConnection(Connection):
                 try:
                     package = ClientPackage.from_datagram(data)
                     # Create new connection if client is unknown.
-                    if not client_address in server.connections:
+                    if client_address not in server.connections:
                         logger.info(f"New client connection from {client_address}.")
                         new_connection = cls(
                             client_address,

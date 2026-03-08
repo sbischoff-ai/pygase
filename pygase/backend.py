@@ -204,16 +204,16 @@ class Server:
         timeout_callback = None
         if retries > 0:
 
-            timeout_callback = lambda: self.dispatch_event(  # type: ignore
-                event_type,
-                *args,
-                target_client=target_client,
-                retries=retries - 1,
-                ack_callback=ack_callback,
-                **kwargs,
-            ) or logger.warning(  # type: ignore
-                f"Event of type {event_type} timed out. Retrying to send event to server."
-            )
+            def timeout_callback():
+                self.dispatch_event(
+                    event_type,
+                    *args,
+                    target_client=target_client,
+                    retries=retries - 1,
+                    ack_callback=ack_callback,
+                    **kwargs,
+                )
+                logger.warning(f"Event of type {event_type} timed out. Retrying to send event to server.")
 
         if target_client == "all":
             for connection in self.connections.values():
