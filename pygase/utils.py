@@ -48,7 +48,6 @@ logger = logging.getLogger("PyGaSe")
 
 
 class Comparable:
-
     """Compare objects by equality of attributes."""
 
     def __eq__(self, other) -> bool:
@@ -61,7 +60,6 @@ class Comparable:
 
 
 class Sendable(Comparable):
-
     """Send objects via UDP packages.
 
     This mixin for classes that are supposed to be sendable as part of a PyGaSe package makes
@@ -95,7 +93,6 @@ class Sendable(Comparable):
 
 
 class NamedEnum:
-
     """Map string labels to integer values.
 
     This is a base class meant to be subclassed to produce a dynamic enum mapping type.
@@ -158,7 +155,6 @@ class NamedEnum:
 
 
 class Sqn(int):
-
     """Use finite periodic integers that fit in 2 bytes.
 
     Subclass of `int` that provides a residue-class-like behaviour of wrapping back to 1 after a maximum value.

@@ -7,6 +7,7 @@ from pygase import Client
 
 ### SETUP ###
 
+
 # Subclass pygase classes to scope event handlers and game-specific variables.
 class ChaseClient(Client):
     def __init__(self):

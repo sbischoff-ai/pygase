@@ -15,7 +15,6 @@ from pygase.utils import Sendable, logger
 
 
 class Event(Sendable):
-
     """Send PyGaSe events and attached data via UDP packages.
 
     # Arguments
@@ -39,7 +38,6 @@ class Event(Sendable):
 
 
 class UniversalEventHandler:
-
     """Handle PyGaSe events with callback functions."""
 
     def __init__(self):

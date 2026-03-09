@@ -16,7 +16,6 @@ TO_DELETE: bytes = bytes.fromhex("d281e5ba")
 
 
 class GameStatus(NamedEnum):
-
     """Enum for the game simulation status.
 
     - `'Paused'`
@@ -30,7 +29,6 @@ GameStatus.register("Active")
 
 
 class GameState(Sendable):
-
     """Customize a serializable game state model.
 
     Contains game state information that will be synchronized between the server and the clients.
@@ -70,7 +68,6 @@ class GameState(Sendable):
 
 
 class GameStateUpdate(Sendable):
-
     """Update a `GameState` object.
 
     Contains a set of changes to carry out on a `GameState`.

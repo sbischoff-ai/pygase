@@ -39,7 +39,6 @@ class DuplicateSequenceError(ConnectionError):
 
 
 class Header(Comparable):
-
     """Create a PyGaSe package header.
 
     # Arguments
@@ -98,7 +97,6 @@ class Header(Comparable):
 
 
 class Package(Comparable):
-
     """Create a UDP package implementing the PyGaSe protocol.
 
     # Arguments
@@ -213,7 +211,6 @@ class Package(Comparable):
 
 
 class ClientPackage(Package):
-
     """Subclass of #Package for packages sent by PyGaSe clients.
 
     # Arguments
@@ -254,7 +251,6 @@ class ClientPackage(Package):
 
 
 class ServerPackage(Package):
-
     """Subclass of #Package for packages sent by PyGaSe servers.
 
     # Arguments
@@ -295,7 +291,6 @@ class ServerPackage(Package):
 
 
 class ConnectionStatus(NamedEnum):
-
     """Enum for the state of a connection.
 
     - `'Disconnected'`
@@ -311,7 +306,6 @@ ConnectionStatus.register("Connecting")
 
 
 class Connection:
-
     """Exchange packages between PyGaSe clients and servers.
 
     PyGaSe connections exchange events with their other side which are handled using custom handler functions.
@@ -628,7 +622,6 @@ class Connection:
 
 
 class ClientConnection(Connection):
-
     """Subclass of #Connection to describe the client side of a PyGaSe connection.
 
     Client connections hold a copy of the game state which is continously being updated according to
@@ -745,7 +738,6 @@ class ClientConnection(Connection):
 
 
 class ServerConnection(Connection):
-
     """Subclass of #Connection that describes the server side of a PyGaSe connection.
 
     # Arguments

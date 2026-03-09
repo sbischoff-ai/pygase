@@ -14,6 +14,7 @@ initial_game_state = GameState(
     countdown=0.0,  # countdown until protection is lifted
 )
 
+
 # Define the game loop iteration function.
 def time_step(game_state, dt):
     # Before a player joins, updating the game state is unnecessary.
@@ -45,6 +46,7 @@ def on_move(player_id, new_position, **kwargs):
 
 # Create the backend.
 backend = Backend(initial_game_state, time_step, event_handlers={"MOVE": on_move})
+
 
 # "JOIN" event handler
 def on_join(player_name, game_state, client_address, **kwargs):

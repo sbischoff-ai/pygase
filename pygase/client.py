@@ -18,7 +18,6 @@ from pygase.utils import logger
 
 
 class Client:
-
     """Exchange events with a PyGaSe server and access a synchronized game state.
 
     # Attributes
@@ -178,9 +177,11 @@ class Client:
         """
         event = Event(event_type, *args, **kwargs)
         if retries > 0:
+
             def timeout_callback():
                 self.dispatch_event(event_type, *args, retries=retries - 1, ack_callback=ack_callback, **kwargs)
                 logger.warning(f"Event of type {event_type} timed out. Retrying to send event to server.")
+
         else:
             timeout_callback = None
 
