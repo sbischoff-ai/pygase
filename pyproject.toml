@@ -88,3 +88,8 @@ add-ignore = [
 max-args = 6
 max-positional-arguments = 6
 max-attributes = 20
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks socket/network or timing-sensitive integration tests",
+]

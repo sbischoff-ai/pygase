@@ -183,6 +183,7 @@ class TestConnection:
         assert connection._package_interval == Connection._package_intervals["good"]
         assert state["throttle_time"] == Connection._min_throttle_time
 
+    @pytest.mark.integration
     def test_send_package(self):
         send_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         recv_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -243,6 +244,7 @@ class TestConnection:
             assert not connection._pending_acks
             assert connection.latency == 0
 
+    @pytest.mark.integration
     def test_dispatch_event(self):
         send_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         recv_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -259,6 +261,7 @@ class TestConnection:
         package = Package.from_datagram(data)
         assert package.events == []
 
+    @pytest.mark.integration
     def test_dispatch_multiple_events(self):
         send_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         recv_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

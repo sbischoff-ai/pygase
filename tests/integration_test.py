@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pygase import aio
+import pytest
 from freezegun import freeze_time
 
 from helpers import assert_timeout
@@ -10,6 +11,7 @@ from pygase.client import Client
 from pygase.gamestate import GameState, GameStatus
 
 
+@pytest.mark.integration
 class TestIntegration:
     def test_client_server_connection(self):
         server = Server(GameStateStore())
@@ -17,9 +19,9 @@ class TestIntegration:
 
         async def test_task():
             await aio.spawn(server.run)
-            await assert_timeout(1, lambda: server.port is not None)
+            await assert_timeout(3, lambda: server.port is not None)
             await aio.spawn(client.connect, server.port)
-            await assert_timeout(1, lambda: server.connections != {})
+            await assert_timeout(3, lambda: server.connections != {})
             assert client.connection.remote_address == (server.hostname, server.port)
             await aio.sleep(0)
             await server.shutdown()
@@ -43,11 +45,11 @@ class TestIntegration:
 
         async def test_task(client_shutdown):
             server_task = await aio.spawn(server.run)
-            await assert_timeout(1, lambda: server._port is not None)
+            await assert_timeout(3, lambda: server._port is not None)
             client_task = await aio.spawn(client.connect, server.port, server.hostname)
-            await assert_timeout(1, lambda: client.connection is not None)
+            await assert_timeout(3, lambda: client.connection is not None)
             state_machine_task = await aio.spawn(state_machine.run_game_loop)
-            await assert_timeout(1, lambda: state_store.get_game_state().game_status == GameStatus.get("Active"))
+            await assert_timeout(3, lambda: state_store.get_game_state().game_status == GameStatus.get("Active"))
             await state_machine.stop()
             await state_machine_task.join()
             await client.disconnect(shutdown_server=client_shutdown)

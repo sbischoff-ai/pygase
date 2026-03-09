@@ -17,15 +17,19 @@
   - `uv run pylint --fail-under=9.9 pygase`
   - `uv run pydocstyle pygase`
 - Targeted tests (single file or subset):
-  - `uv run pytest tests/connection_test.py`
-  - `uv run pytest tests -k connection`
+  - `uv run pytest -m "not integration" tests/connection_test.py`
+  - `uv run pytest -m "not integration" tests -k connection`
+- Quick default test pass (fast feedback):
+  - `uv run pytest -m "not integration" tests`
+- Integration tests only:
+  - `uv run pytest -m integration tests`
 - Full tests (match CI intent):
   - `uv run pytest tests --doctest-modules --cov=pygase --cov-report=term-missing`
 
 ## Fast path vs full validation
 - Fast path (small, local edits that do not affect protocol, networking, or cross-module behavior):
   1. `uv run black pygase tests`
-  2. `uv run pytest tests/<affected_module>_test.py`
+  2. `uv run pytest -m "not integration" tests/<affected_module>_test.py`
   3. `uv run mypy pygase` (recommended if touching typed APIs)
 - Full validation (required for protocol/network behavior edits, connection timing/ordering changes, or broad refactors):
   1. `uv run black pygase tests`
@@ -43,6 +47,7 @@
   - client integration points in `client_test.py`
   - state/update semantics in `gamestate_test.py`
 - Use integration tests (`tests/integration_test.py`) when validating real interactions across client/backend/connection boundaries, especially message ordering, retries, ack behavior, and state sync flows that cannot be trusted from isolated mocks.
+- Tests marked with `@pytest.mark.integration` are socket/network or timing-sensitive; exclude them by default with `-m "not integration"` for fast local iteration.
 
 ## Troubleshooting common failures
 - UDP/socket flakiness:

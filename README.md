@@ -61,6 +61,15 @@ validation scope guidance, and repository testing conventions.
 Documentation source files you should edit directly are `README.md`, `getting-started.md`, and `pydocmd.yml`.
 The `docs/` directory is generated site output and should be regenerated instead of hand-edited.
 
+
+### Testing
+
+Use marker selection to keep local feedback fast while still running full pre-merge validation:
+
+- Quick iteration (default): `uv run pytest -m "not integration" tests`
+- Integration coverage only: `uv run pytest -m integration tests`
+- Full pre-merge validation: `uv run pytest tests --doctest-modules --cov=pygase --cov-report=term-missing`
+
 ---
 ## Changes
 
