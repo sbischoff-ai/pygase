@@ -44,7 +44,7 @@ In this example our game loop will have the enemies `position` continously oscil
 Now we can initialize and run the backend:
 ```python
 backend = Backend(initial_game_state, time_step)
-backend.run('localhost', 8080)
+backend.run('localhost', 8080, interval=0.02)
 ```
 Mind that this `run` call is blocking, so whatever we put after there will not be executed
 until the backend is shut down again.
@@ -65,7 +65,7 @@ def time_step(game_state, dt):
     return {"position": new_position}
 
 backend = Backend(initial_game_state, time_step)
-backend.run('localhost', 8080)
+backend.run('localhost', 8080, interval=0.02)
 ```
 
 ## Client
@@ -115,7 +115,7 @@ backend = Backend(
     time_step,
     event_handlers={"ATTACK": on_attack}
 )
-backend.run('localhost', 8080)
+backend.run('localhost', 8080, interval=0.02)
 ```
 The event handler function `on_attack` works similar to the time step function, only that it receives additional
 keyword arguments like the current `game_state` in this case or the `attack_position`, which we assume to be attached
@@ -170,7 +170,7 @@ def on_attack(attack_position, client_address, game_state, **kwargs):
     return {}
 
 backend.game_state_machine.register_event_handler("ATTACK", on_attack)
-backend.run('localhost', 8080)
+backend.run('localhost', 8080, interval=0.02)
 ```
 Here we used another one of the keyword arguments PyGaSe passes to the event handler, the `client_address`
 from which the event was sent. Along with the event data, a string containing the feedback message, we also
@@ -276,5 +276,5 @@ backend.game_state_machine.register_event_handler("ATTACK", on_attack)
 ### MAIN PROCESS ###
 
 if __name__ == "__main__":
-    backend.run('localhost', 8080)
+    backend.run('localhost', 8080, interval=0.02)
 ```

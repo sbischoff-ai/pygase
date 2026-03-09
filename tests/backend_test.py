@@ -151,3 +151,19 @@ class TestBackend:
         assert backend.game_state_machine.time_step == time_step
         assert isinstance(backend.server, Server)
         assert backend.server.game_state_store == backend.game_state_store
+
+    def test_run_forwards_interval(self):
+        interval = 0.1
+        backend = Backend(initial_game_state=GameState(), time_step_function=lambda game_state, dt: {})
+        calls = []
+
+        def fake_run_game_loop_in_thread(*args, **kwargs):
+            calls.append((args, kwargs))
+
+        backend.game_state_machine.run_game_loop_in_thread = fake_run_game_loop_in_thread
+        backend.server.run = lambda *args, **kwargs: None
+        backend.game_state_machine.stop = lambda *args, **kwargs: None
+
+        backend.run("localhost", 1234, interval=interval)
+
+        assert calls == [((), {"interval": interval})]

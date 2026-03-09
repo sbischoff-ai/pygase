@@ -429,7 +429,7 @@ class Backend:
             "RESET_FOO": lambda game_state, dt: {foo: 0.0},
             "SET_BAR": lambda new_bar, game_state, dt: {bar: new_bar}
         }
-    ).run(hostname="localhost", port=8080)
+    ).run(hostname="localhost", port=8080, interval=0.02)
     ```
 
     """
@@ -445,15 +445,17 @@ class Backend:
         self.server = Server(self.game_state_store)
         logger.info("Backend assembled and ready.")
 
-    def run(self, hostname: str, port: int):
+    def run(self, hostname: str, port: int, interval: float = 0.02):
         """Run state machine and server and bind the server to a given address.
 
         # Arguments
         hostname (str): hostname or IPv4 address the server will be bound to
         port (int): port number the server will be bound to
+        interval (float): target game loop interval in seconds, forwarded to
+            #GameStateMachine.run_game_loop_in_thread(); defaults to `0.02` (50 updates per second)
 
         """
-        self.game_state_machine.run_game_loop_in_thread()
+        self.game_state_machine.run_game_loop_in_thread(interval=interval)
         self.server.run(port, hostname, self.game_state_machine)
         self.game_state_machine.stop()
         logger.info("Backend successfully shut down.")
