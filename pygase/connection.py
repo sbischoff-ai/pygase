@@ -169,7 +169,6 @@ class Package(Comparable):
         datagram = self.header.to_bytearray()
         # The header makes up the first 12 bytes of the package
         datagram.extend(self._create_event_block())
-        datagram = datagram
         if len(datagram) > self._max_size:
             raise OverflowError("Package exceeds the maximum size of " + str(self._max_size) + " bytes.")
         self._datagram = bytes(datagram)
@@ -237,7 +236,6 @@ class ClientPackage(Package):
         # The header makes up the first 12 bytes of the package
         datagram.extend(self.time_order.to_sqn_bytes())
         datagram.extend(self._create_event_block())
-        datagram = datagram
         if len(datagram) > self._max_size:
             raise OverflowError("Package exceeds the maximum size of " + str(self._max_size) + " bytes.")
         self._datagram = bytes(datagram)
@@ -278,7 +276,6 @@ class ServerPackage(Package):
         datagram.extend(len(state_update_bytepack).to_bytes(2, "big"))
         datagram.extend(state_update_bytepack)
         datagram.extend(self._create_event_block())
-        datagram = datagram
         if len(datagram) > self._max_size:
             raise OverflowError("package exceeds the maximum size of " + str(self._max_size) + " bytes")
         self._datagram = bytes(datagram)
@@ -703,7 +700,7 @@ class ClientConnection(Connection):
                     logger.info(f"Sending shutdown command to server at {self.remote_address}.")
                     await sock.sendto("shutdown".encode("utf-8"), self.remote_address)
                     break
-                elif command == "shut_me_down":
+                if command == "shut_me_down":
                     break
             logger.info(f"Shutting down connection to {self.remote_address}.")
             await recv_loop_task.cancel()
@@ -855,10 +852,9 @@ class ServerConnection(Connection):
                         if data.decode("utf-8") == "shutdown" and client_address == server.host_client:
                             logger.info(f"Received shutdown command from host client {client_address}.")
                             break
-                        elif data.decode("utf-8") == "shut_me_down":
+                        if data.decode("utf-8") == "shut_me_down":
                             break
-                        else:
-                            logger.warning("Received unknown package.")
+                        logger.warning("Received unknown package.")
                     except UnicodeDecodeError:
                         logger.warning("Received unknown package.")
             logger.info(f"Shutting down server on {(hostname, port)}.")

@@ -201,7 +201,6 @@ class Server:
                 return lambda: ack_callback(connection)
             return None
 
-        timeout_callback = None
         if retries > 0:
 
             def timeout_callback():
@@ -214,6 +213,8 @@ class Server:
                     **kwargs,
                 )
                 logger.warning(f"Event of type {event_type} timed out. Retrying to send event to server.")
+        else:
+            timeout_callback = None
 
         if target_client == "all":
             for connection in self.connections.values():
