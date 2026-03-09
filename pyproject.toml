@@ -41,7 +41,6 @@ dev = [
     "pygame>=2.6.0",
     "pygments>=2.18.0",
     "pylint>=3.2.0",
-    "pylint-fail-under>=0.3.0",
     "pytest>=8.0.0",
     "pytest-cov>=5.0.0",
 ]

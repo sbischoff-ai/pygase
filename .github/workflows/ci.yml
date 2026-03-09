@@ -28,7 +28,7 @@ jobs:
       - name: Install project and QA dependencies
         run: |
           uv pip install --system -e .
-          uv pip install --system pytest pytest-cov mypy pylint pylint-fail-under pydocstyle freezegun
+          uv pip install --system pytest pytest-cov mypy pylint pydocstyle freezegun
 
       - name: Run tests
         run: |
@@ -39,7 +39,7 @@ jobs:
         run: mypy pygase
 
       - name: Lint
-        run: pylint-fail-under --fail_under 9.9 pygase
+        run: pylint --fail-under=9.9 pygase
 
       - name: Check docstring style
         run: pydocstyle pygase
