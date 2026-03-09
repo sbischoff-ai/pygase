@@ -13,10 +13,10 @@ class TestGameState:
     def test_game_state_instantiation(self):
         game_state = GameState()
         assert game_state.time_order == 0
-        assert game_state.game_status == GameStatus.get("Paused")
-        paused_game_state = GameState(game_status=GameStatus.get("Active"))
+        assert game_state.game_status == GameStatus.PAUSED
+        paused_game_state = GameState(game_status=GameStatus.ACTIVE)
         assert game_state.game_status != paused_game_state.game_status
-        paused_game_state.game_status = GameStatus.get("Paused")
+        paused_game_state.game_status = GameStatus.PAUSED
         assert game_state == paused_game_state
 
 
@@ -28,7 +28,7 @@ class TestGameStateUpdate:
         assert update == unpacked_update
 
     def test_update_arithmetic(self):
-        game_state = GameState(time_order=0, game_status=GameStatus.get("Paused"))
+        game_state = GameState(time_order=0, game_status=GameStatus.PAUSED)
         update = GameStateUpdate(time_order=0, test=0)
         game_state += update
         assert not hasattr(game_state, "test") and game_state.time_order == 0
@@ -57,3 +57,9 @@ class TestGameStateUpdate:
             + update
         )
         assert game_state.time_order == 5 and game_state.test[1] == "test1"
+
+
+class TestGameStatus:
+    def test_enum_values(self):
+        assert GameStatus.PAUSED.value == 0
+        assert GameStatus.ACTIVE.value == 1

@@ -125,7 +125,7 @@ class TestGameStateMachine:
                 dt_calls.append(dt)
                 update = {"step": game_state.step + 1}
                 if update["step"] >= 3:
-                    update["game_status"] = GameStatus.get("Paused")
+                    update["game_status"] = GameStatus.PAUSED
                 return update
 
         store = GameStateStore(GameState(0, step=0))
@@ -138,7 +138,7 @@ class TestGameStateMachine:
         assert sleep_calls == pytest.approx([0.07, 0.04, 0.07])
         assert all(compute + sleep >= interval - 1e-9 for compute, sleep in zip([0.03, 0.06, 0.03], sleep_calls))
         assert store.get_game_state().step == 3
-        assert store.get_game_state().game_status == GameStatus.get("Paused")
+        assert store.get_game_state().game_status == GameStatus.PAUSED
 
 
 class TestBackend:

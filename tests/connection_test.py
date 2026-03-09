@@ -14,6 +14,7 @@ from pygase.connection import (
     ClientPackage,
     ServerPackage,
     Connection,
+    ConnectionStatus,
     DuplicateSequenceError,
     ProtocolIDMismatchError,
 )
@@ -65,6 +66,13 @@ class TestServerPackage:
         datagram = package.to_datagram()
         unpacked_package = ServerPackage.from_datagram(datagram)
         assert package == unpacked_package
+
+
+class TestConnectionStatus:
+    def test_enum_values(self):
+        assert ConnectionStatus.DISCONNECTED.value == 0
+        assert ConnectionStatus.CONNECTED.value == 1
+        assert ConnectionStatus.CONNECTING.value == 2
 
 
 class TestConnection:

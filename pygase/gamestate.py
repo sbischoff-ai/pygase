@@ -9,28 +9,27 @@
 
 """
 
-from pygase.utils import Sendable, NamedEnum, Sqn
+from enum import IntEnum
+
+from pygase.utils import Sendable, Sqn
 
 # unique 4-byte token to mark GameState entries for deletion
 TO_DELETE: bytes = bytes.fromhex("d281e5ba")
 
 
-class GameStatus(NamedEnum):
-
+class GameStatus(IntEnum):
     """Enum for the game simulation status.
 
-    - `'Paused'`
-    - `'Active'`
+    - `PAUSED`
+    - `ACTIVE`
 
     """
 
-
-GameStatus.register("Paused")
-GameStatus.register("Active")
+    PAUSED = 0
+    ACTIVE = 1
 
 
 class GameState(Sendable):
-
     """Customize a serializable game state model.
 
     Contains game state information that will be synchronized between the server and the clients.
@@ -52,14 +51,14 @@ class GameState(Sendable):
 
     """
 
-    def __init__(self, time_order: int = 0, game_status: int = GameStatus.get("Paused"), **kwargs):
+    def __init__(self, time_order: int = 0, game_status: int = GameStatus.PAUSED, **kwargs):
         self.__dict__ = kwargs
         self.game_status = game_status
         self.time_order = Sqn(time_order)
 
     def is_paused(self) -> bool:
         """Return `True` if game is paused."""
-        return self.game_status == GameStatus.get("Paused")
+        return self.game_status == GameStatus.PAUSED
 
     # Check time ordering
     def __lt__(self, other) -> bool:
@@ -70,7 +69,6 @@ class GameState(Sendable):
 
 
 class GameStateUpdate(Sendable):
-
     """Update a `GameState` object.
 
     Contains a set of changes to carry out on a `GameState`.
