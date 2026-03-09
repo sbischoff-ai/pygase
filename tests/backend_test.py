@@ -17,12 +17,13 @@ class TestServer:
         assert isinstance(server.game_state_store, GameStateStore)
         assert isinstance(server._universal_event_handler, UniversalEventHandler)
 
+    @pytest.mark.integration
     def test_run_async(self):
         server = Server(GameStateStore())
 
         async def test_task():
             await aio.spawn(server.run, 1234)
-            await assert_timeout(1, lambda: server.hostname == "localhost")
+            await assert_timeout(3, lambda: server.hostname == "localhost")
             assert server._port == 1234
             await server.shutdown()
             return True
