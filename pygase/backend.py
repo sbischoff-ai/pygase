@@ -24,7 +24,6 @@ from pygase.utils import logger
 
 
 class GameStateStore:
-
     """Provide access to a game state and manage state updates.
 
     # Arguments
@@ -75,7 +74,6 @@ class GameStateStore:
 
 
 class Server:
-
     """Listen to clients and orchestrate the flow of events and state updates.
 
     The #Server instance does not contain game logic or state, it is only responsible for connections
@@ -213,6 +211,7 @@ class Server:
                     **kwargs,
                 )
                 logger.warning(f"Event of type {event_type} timed out. Retrying to send event to server.")
+
         else:
             timeout_callback = None
 
@@ -237,7 +236,6 @@ class Server:
 
 
 class GameStateMachine:
-
     """Run a simulation that propagates the game state.
 
     A #GameStateMachine progresses a game state through time, applying all game simulation logic.
@@ -322,21 +320,24 @@ class GameStateMachine:
             )
         game_state = self._game_state_store.get_game_state()
         dt = interval
+        last_step_ts = None
         self._game_loop_is_running = True
         logger.info(f"State machine starting game loop with interval of {interval} seconds.")
         while game_state.game_status == GameStatus.get("Active"):
-            t0 = time.time()
+            loop_start = time.perf_counter()
+            dt = interval if last_step_ts is None else loop_start - last_step_ts
+            last_step_ts = loop_start
             update_dict = self.time_step(game_state, dt)
             while not self._event_queue.empty():
                 event = await self._event_queue.get()
                 event_update = await self._universal_event_handler.handle(event, game_state=game_state, dt=dt)
                 update_dict.update(event_update)
-                if time.time() - t0 > 0.95 * interval:
+                if time.perf_counter() - loop_start > 0.95 * interval:
                     break
             self._game_state_store.push_update(GameStateUpdate(game_state.time_order + 1, **update_dict))
             game_state = self._game_state_store.get_game_state()
-            dt = max(interval, time.time() - t0)
-            await aio.sleep(max(0, interval - dt))
+            compute_time = time.perf_counter() - loop_start
+            await aio.sleep(max(0, interval - compute_time))
             self.game_time += dt
         logger.info("Game loop stopped.")
         self._game_loop_is_running = False
@@ -404,7 +405,6 @@ class GameStateMachine:
 
 
 class Backend:
-
     """Easily create a fully integrated PyGaSe backend.
 
     # Arguments
