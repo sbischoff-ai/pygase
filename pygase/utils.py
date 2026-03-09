@@ -28,11 +28,13 @@ except ImportError:  # pragma: no cover - fallback for restricted test envs
 
         @staticmethod
         def packb(data, **kwargs):
+            """Pack message data with msgpack compatibility options."""
             kwargs.pop("force_float_precision", None)
             return msgpack.packb(data, use_bin_type=True)
 
         @staticmethod
         def unpackb(data):
+            """Unpack message data with string decoding enabled."""
             return msgpack.unpackb(data, raw=False)
 
     umsgpack = _UmsgpackFallback()
@@ -88,8 +90,8 @@ class Sendable(Comparable):
             received_sendable = object.__new__(cls)
             received_sendable.__dict__ = umsgpack.unpackb(bytepack)  # pylint: disable=attribute-defined-outside-init
             return received_sendable
-        except (umsgpack.InsufficientDataException, KeyError, TypeError):
-            raise TypeError("Bytes could no be parsed into " + cls.__name__ + ".")
+        except (umsgpack.InsufficientDataException, KeyError, TypeError) as exc:
+            raise TypeError("Bytes could no be parsed into " + cls.__name__ + ".") from exc
 
 
 class NamedEnum:

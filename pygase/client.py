@@ -177,11 +177,12 @@ class Client:
 
         """
         event = Event(event_type, *args, **kwargs)
-        timeout_callback = None
         if retries > 0:
             def timeout_callback():
                 self.dispatch_event(event_type, *args, retries=retries - 1, ack_callback=ack_callback, **kwargs)
                 logger.warning(f"Event of type {event_type} timed out. Retrying to send event to server.")
+        else:
+            timeout_callback = None
 
         self.connection.dispatch_event(event, ack_callback, timeout_callback)
 

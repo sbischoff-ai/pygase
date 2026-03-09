@@ -66,6 +66,7 @@ disable = [
     "missing-function-docstring",
     "missing-module-docstring",
     "too-few-public-methods",
+    "logging-fstring-interpolation",
 ]
 
 [tool.pydocstyle]
@@ -82,3 +83,8 @@ add-ignore = [
     "D203",
     "D401",
 ]
+
+[tool.pylint.design]
+max-args = 6
+max-positional-arguments = 6
+max-attributes = 20
