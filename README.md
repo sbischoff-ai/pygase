@@ -58,6 +58,9 @@ Debug logs are also a good way to understand the inner workings of PyGaSe.
 Contributors should review [`AGENTS.md`](AGENTS.md) for a quick architecture map, canonical `uv` commands,
 validation scope guidance, and repository testing conventions.
 
+Documentation source files you should edit directly are `README.md`, `getting-started.md`, and `pydocmd.yml`.
+The `docs/` directory is generated site output and should be regenerated instead of hand-edited.
+
 ---
 ## Changes
 

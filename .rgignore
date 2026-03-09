@@ -1,0 +1,9 @@
+# Generated documentation output (MkDocs site_dir) is excluded from ripgrep
+# search/navigation to keep results focused on editable sources.
+docs/assets/**
+docs/search/**
+docs/api/**
+docs/getting-started/**
+docs/*.html
+docs/*.xml
+docs/*.gz
