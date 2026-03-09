@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from pygase import aio
-from freezegun import freeze_time
 import pytest
 
 from helpers import assert_timeout
@@ -109,29 +108,36 @@ class TestGameStateMachine:
         with pytest.raises(NotImplementedError):
             state_machine.time_step(GameState(), 0.1)
 
-    def test_game_loop(self):
+    def test_game_loop(self, monkeypatch):
+        interval = 0.1
+        perf_counter_samples = iter([0.0, 0.03, 0.1, 0.16, 0.24, 0.27])
+        sleep_calls = []
+        dt_calls = []
+
+        async def fake_sleep(duration):
+            sleep_calls.append(duration)
+
+        monkeypatch.setattr("pygase.backend.time.perf_counter", lambda: next(perf_counter_samples))
+        monkeypatch.setattr("pygase.backend.aio.sleep", fake_sleep)
+
         class MyStateMachine(GameStateMachine):
             def time_step(self, game_state, dt):
-                test = game_state.test + 1
-                return {"test": test}
+                dt_calls.append(dt)
+                update = {"step": game_state.step + 1}
+                if update["step"] >= 3:
+                    update["game_status"] = GameStatus.get("Paused")
+                return update
 
-        store = GameStateStore(GameState(0, test=0))
+        store = GameStateStore(GameState(0, step=0))
         state_machine = MyStateMachine(store)
 
-        async def test_task():
-            with freeze_time() as frozen_time:
-                game_loop = await aio.spawn(state_machine.run_game_loop, 1)
-                for _ in range(10):
-                    frozen_time.tick()
-                    await aio.sleep(0)
-                await state_machine.stop()
-                await game_loop.join()
-            return True
+        aio.run(state_machine.run_game_loop, interval)
 
-        assert aio.run(test_task)
-        assert store.get_game_state().time_order == 12
-        assert store.get_game_state().test == 10
-        assert state_machine.game_time == 10
+        assert dt_calls == pytest.approx([0.1, 0.1, 0.14])
+        assert state_machine.game_time == pytest.approx(sum(dt_calls))
+        assert sleep_calls == pytest.approx([0.07, 0.04, 0.07])
+        assert all(compute + sleep >= interval - 1e-9 for compute, sleep in zip([0.03, 0.06, 0.03], sleep_calls))
+        assert store.get_game_state().step == 3
         assert store.get_game_state().game_status == GameStatus.get("Paused")
 
 
