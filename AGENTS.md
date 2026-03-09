@@ -52,3 +52,8 @@
 - Timing assumptions:
   - Tests that depend on scheduler timing should use robust margins and avoid brittle sleep-based exactness.
   - If a failure appears time-sensitive, inspect event loop load and replace strict sequence-on-time assertions with sequence/eventual-state assertions where appropriate.
+
+## Documentation source-of-truth vs generated output
+- Editable documentation sources live in repository root files such as `README.md`, `getting-started.md`, and documentation build configuration (`pydocmd.yml`).
+- The `docs/` tree is generated site output (`site_dir: docs`) and should generally not be hand-edited; regenerate it from source files/config when docs content changes.
+- Search/navigation tooling may ignore generated `docs/` artifacts (for example via `.rgignore`) to reduce noise, but this does not change packaging/build behavior.
