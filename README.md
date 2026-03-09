@@ -53,6 +53,11 @@ of sending, receiving and handling single network packages.
 
 Debug logs are also a good way to understand the inner workings of PyGaSe.
 
+### Development
+
+Contributors should review [`AGENTS.md`](AGENTS.md) for a quick architecture map, canonical `uv` commands,
+validation scope guidance, and repository testing conventions.
+
 ---
 ## Changes
 
