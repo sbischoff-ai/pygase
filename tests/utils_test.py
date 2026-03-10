@@ -1,5 +1,5 @@
 import pytest
-from pygase.utils import Sqn, Sendable, get_available_ip_addresses, umsgpack
+from pygase.utils import LockedResource, LockedRessource, Sqn, Sendable, get_available_ip_addresses, umsgpack
 
 
 class TestSendable:
@@ -163,6 +163,26 @@ class TestSqn:
         assert subSqn._bytesize == 2 * Sqn._bytesize
         assert (subSqn._max_sequence + 1) / (Sqn._max_sequence + 1) == Sqn._max_sequence + 1
         assert len(subSqn(12532).to_sqn_bytes()) == 4
+
+
+class TestLockedResourceCompatibility:
+    def test_locked_ressource_alias_warns_and_works(self):
+        with pytest.deprecated_call(match="LockedRessource is deprecated"):
+            locked_resource = LockedRessource({"foo": "bar"})
+
+        with locked_resource as resource:
+            assert resource == {"foo": "bar"}
+
+    def test_ressource_property_alias_warns_and_tracks_resource(self):
+        locked_resource = LockedResource({"foo": "bar"})
+
+        with pytest.deprecated_call(match="LockedResource.ressource is deprecated"):
+            assert locked_resource.ressource == {"foo": "bar"}
+
+        with pytest.deprecated_call(match="LockedResource.ressource is deprecated"):
+            locked_resource.ressource = {"baz": "qux"}
+
+        assert locked_resource.resource == {"baz": "qux"}
 
 
 class TestUtilFunctions:

@@ -23,7 +23,7 @@ class TestClient:
         client = Client()
         client.connection = ClientConnection(None, None)
         with client.access_game_state() as game_state:
-            assert game_state == client.connection.game_state_context.ressource
+            assert game_state == client.connection.game_state_context.resource
             assert game_state.__class__ == GameState
         assert isinstance(client.connection._game_state_update_lock, type(asyncio.Lock()))
 
@@ -33,9 +33,9 @@ class TestClient:
         thread = threading.Thread(target=client.wait_until, args=[lambda game_state: hasattr(game_state, "foobar")])
         thread.start()
         assert thread.is_alive()
-        client.connection.game_state_context.ressource.foo = "bar"
+        client.connection.game_state_context.resource.foo = "bar"
         assert thread.is_alive()
-        client.connection.game_state_context.ressource.foobar = "baz"
+        client.connection.game_state_context.resource.foobar = "baz"
         thread.join(timeout=0.1)
         assert not thread.is_alive()
         with freeze_time() as frozen_time:
@@ -67,7 +67,7 @@ class TestClient:
 
         thread = threading.Thread(target=test_function)
         thread.start()
-        client.connection.game_state_context.ressource.foo = {"bar": "baz"}
+        client.connection.game_state_context.resource.foo = {"bar": "baz"}
         thread.join(timeout=0.1)
         assert not thread.is_alive()
         with freeze_time() as frozen_time:

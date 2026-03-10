@@ -14,7 +14,7 @@ This module is not supposed to be required by users of this library.
 - #ConnectionStatus: enum for the status of a client-server connection
 - #Connection: class for the core network logic of client-server connections
 - #ClientConnection: subclass of #Connection for the client side
-- #ServerConnection: subclass of #Connectoin for the server side
+- #ServerConnection: subclass of #Connection for the server side
 
 """
 
@@ -27,7 +27,7 @@ from pygase.aio import socket, awaitable, iscoroutinefunction
 
 from enum import IntEnum
 
-from pygase.utils import Sqn, LockedRessource, Comparable, logger
+from pygase.utils import Sqn, LockedResource, Comparable, logger
 from pygase.event import Event
 from pygase.gamestate import GameState, GameStateUpdate
 
@@ -49,7 +49,7 @@ class Header(Comparable):
     sequence (int): package sequence number
     ack (int): sequence number of the last received package
     ack_bitfield (str): A 32 character string representing the 32 sequence numbers prior to the last one received,
-        with the first character corresponding the packge directly preceding it and so forth.
+        with the first character corresponding the package directly preceding it and so forth.
         '1' means that package has been received, '0' means it hasn't.
 
     # Attributes
@@ -629,18 +629,18 @@ class Connection:
 class ClientConnection(Connection):
     """Subclass of #Connection to describe the client side of a PyGaSe connection.
 
-    Client connections hold a copy of the game state which is continously being updated according to
+    Client connections hold a copy of the game state which is continuously being updated according to
     state updates received from the server.
 
     # Attributes
-    game_state_context (pygase.utils.LockedRessource): provides thread-safe access to a #pygase.GameState
+    game_state_context (pygase.utils.LockedResource): provides thread-safe access to a #pygase.GameState
 
     """
 
     def __init__(self, remote_address: tuple, event_handler):
         super().__init__(remote_address, event_handler)
         self._command_queue = aio.UniversalQueue()
-        self.game_state_context = LockedRessource(GameState())
+        self.game_state_context = LockedResource(GameState())
         self._game_state_update_lock = asyncio.Lock()
 
     def shutdown(self, shutdown_server: bool = False):
@@ -649,7 +649,7 @@ class ClientConnection(Connection):
         This method can also be spawned as a coroutine.
 
         # Arguments
-        shutdown_server (bool): wether or not the server should be shut down too
+        shutdown_server (bool): whether or not the server should be shut down too
             (only has an effect if the client has host permissions)
 
         """
@@ -671,11 +671,11 @@ class ClientConnection(Connection):
 
     def _create_next_package(self):
         """Override #Connection._create_next_package to send a #ClientPackage."""
-        time_order = self.game_state_context.ressource.time_order
+        time_order = self.game_state_context.resource.time_order
         return ClientPackage(Header(self.local_sequence, self.remote_sequence, self.ack_bitfield), time_order)
 
     def loop(self):
-        """Continously operate the connection.
+        """Continuously operate the connection.
 
         This method will keep sending and receiving packages and handling events until it is cancelled or
         the connection receives a shutdown command. It can also be spawned as a coroutine.
@@ -716,14 +716,14 @@ class ClientConnection(Connection):
                 logger.debug(
                     (
                         f"Updating game state from time order "
-                        f"{self.game_state_context.ressource.time_order} to "
+                        f"{self.game_state_context.resource.time_order} to "
                         f"{package.game_state_update.time_order}."
                     )
                 )
-                self.game_state_context.ressource += package.game_state_update
+                self.game_state_context.resource += package.game_state_update
 
     async def _client_recv_loop(self, sock):
-        """Continously handle packages received from the server.
+        """Continuously handle packages received from the server.
 
         This coroutine, once spawned, will keep receiving packages from the server until it is explicitly
         cancelled.
