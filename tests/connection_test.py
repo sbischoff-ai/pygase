@@ -14,6 +14,7 @@ from pygase.connection import (
     ClientPackage,
     ServerPackage,
     Connection,
+    ConnectionStatus,
     DuplicateSequenceError,
     ProtocolIDMismatchError,
 )
@@ -68,6 +69,11 @@ class TestServerPackage:
 
 
 class TestConnection:
+    def test_connection_status_enum_values(self):
+        assert ConnectionStatus.DISCONNECTED.value == 0
+        assert ConnectionStatus.CONNECTED.value == 1
+        assert ConnectionStatus.CONNECTING.value == 2
+
     def test_recv_first_package(self):
         connection = Connection(("host", 1234), None)
         assert connection.local_sequence == 0

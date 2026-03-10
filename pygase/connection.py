@@ -23,7 +23,9 @@ import time
 from pygase import aio
 from pygase.aio import socket, awaitable, iscoroutinefunction
 
-from pygase.utils import NamedEnum, Sqn, LockedRessource, Comparable, logger
+from enum import IntEnum
+
+from pygase.utils import Sqn, LockedRessource, Comparable, logger
 from pygase.event import Event
 from pygase.gamestate import GameState, GameStateUpdate
 
@@ -290,19 +292,18 @@ class ServerPackage(Package):
         return result
 
 
-class ConnectionStatus(NamedEnum):
+class ConnectionStatus(IntEnum):
     """Enum for the state of a connection.
 
-    - `'Disconnected'`
-    - `'Connecting'`
-    - `'Connected'`
+    - `DISCONNECTED`
+    - `CONNECTED`
+    - `CONNECTING`
 
     """
 
-
-ConnectionStatus.register("Disconnected")
-ConnectionStatus.register("Connected")
-ConnectionStatus.register("Connecting")
+    DISCONNECTED = 0
+    CONNECTED = 1
+    CONNECTING = 2
 
 
 class Connection:
@@ -327,7 +328,7 @@ class Connection:
     remote_sequence (pygase.utils.Sqn): sequence number of the last received package
     ack_bitfield (str): acks for the 32 packages prior to `self.remote_sequence`
     latency (float): the last registered RTT (round trip time)
-    status (ConnectionStatus): an integer value that informs about the state of the connections
+    status (ConnectionStatus): enum value that informs about the state of the connections
     quality (str): either `'good'` or `'bad'` depending on latency, used internally for
         congestion avoidance
 
@@ -356,7 +357,7 @@ class Connection:
         self.remote_sequence = Sqn(0)
         self.ack_bitfield = "0" * 32
         self.latency = 0.0
-        self.status = ConnectionStatus.get("Disconnected")
+        self.status = ConnectionStatus.DISCONNECTED
         self.quality = "good"  # this is used for congestion avoidance
         self._package_interval = self._package_intervals["good"]
         self._outgoing_event_queue = aio.UniversalQueue()
@@ -397,8 +398,8 @@ class Connection:
 
         """
         self._last_recv = time.time()
-        if self.status != ConnectionStatus.get("Connected"):
-            self._set_status("Connected")
+        if self.status != ConnectionStatus.CONNECTED:
+            self._set_status(ConnectionStatus.CONNECTED)
         sequence, ack, ack_bitfield = package.header.destructure()
         logger.debug(f"Received package with sequence number {sequence} from {self.remote_address}.")
         self._update_remote_info(sequence)
@@ -506,7 +507,7 @@ class Connection:
                 t0 = time.time()
                 if t0 - self._last_recv > self._timeout:
                     logger.warning(f"Connection to {self.remote_address} timed out after {self._timeout} seconds.")
-                    self._set_status("Disconnected")
+                    self._set_status(ConnectionStatus.DISCONNECTED)
                     break
                 await self._send_next_package(sock)
                 await aio.sleep(max([self._package_interval - time.time() + t0, 0]))
@@ -549,10 +550,10 @@ class Connection:
         logger.debug(f"Sent package with sequence number {package.header.sequence} to {self.remote_address}.")
         self._pending_acks[package.header.sequence] = time.time()
 
-    def _set_status(self, status: str):
+    def _set_status(self, status: ConnectionStatus):
         """Set `self.status` to a new #ConnectionStatus value."""
-        self.status = ConnectionStatus.get(status)
-        logger.info(f"Status of connection to {self.remote_address} set to '{status}'.")
+        self.status = status
+        logger.info(f"Status of connection to {self.remote_address} set to '{status.name}'.")
 
     def _update_latency(self, rtt: int):
         """Update `self.latency` according to a measured rount trip time.
@@ -681,13 +682,13 @@ class ClientConnection(Connection):
     async def loop(self):  # pylint: disable=function-redefined
         # pylint: disable=missing-docstring
         logger.info("Trying to connect to server ...")
-        self._set_status("Connecting")
+        self._set_status(ConnectionStatus.CONNECTING)
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             send_loop_task = await aio.spawn(self._send_loop, sock)
             recv_loop_task = await aio.spawn(self._client_recv_loop, sock)
             event_loop_task = await aio.spawn(self._event_loop)
             # check for disconnect event
-            while not self.status == ConnectionStatus.get("Disconnected"):
+            while self.status != ConnectionStatus.DISCONNECTED:
                 command = await self._command_queue.get()
                 if command == "shutdown":
                     logger.info(f"Sending shutdown command to server at {self.remote_address}.")
@@ -699,7 +700,7 @@ class ClientConnection(Connection):
             await recv_loop_task.cancel()
             await send_loop_task.cancel()
             await event_loop_task.cancel()
-            self._set_status("Disconnected")
+            self._set_status(ConnectionStatus.DISCONNECTED)
 
     async def _recv(self, package: ServerPackage):
         """Extend #Connection._recv to update the game state."""
@@ -829,7 +830,7 @@ class ServerConnection(Connection):
                             logger.info(f"Setting {client_address} as client with host permissions.")
                             server.host_client = client_address
                         server.connections[client_address] = new_connection
-                    elif server.connections[client_address].status == ConnectionStatus.get("Disconnected"):
+                    elif server.connections[client_address].status == ConnectionStatus.DISCONNECTED:
                         # Start sending packages again, which will also set status to "Connected".
                         logger.info(f"Client reconnecting from {client_address}.")
                         await connection_tasks.spawn(

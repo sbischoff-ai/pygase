@@ -9,23 +9,24 @@
 
 """
 
-from pygase.utils import Sendable, NamedEnum, Sqn
+from enum import IntEnum
+
+from pygase.utils import Sendable, Sqn
 
 # unique 4-byte token to mark GameState entries for deletion
 TO_DELETE: bytes = bytes.fromhex("d281e5ba")
 
 
-class GameStatus(NamedEnum):
+class GameStatus(IntEnum):
     """Enum for the game simulation status.
 
-    - `'Paused'`
-    - `'Active'`
+    - `PAUSED`
+    - `ACTIVE`
 
     """
 
-
-GameStatus.register("Paused")
-GameStatus.register("Active")
+    PAUSED = 0
+    ACTIVE = 1
 
 
 class GameState(Sendable):
@@ -38,26 +39,26 @@ class GameState(Sendable):
 
     # Arguments
     time_order (int): current time order number of the game state, higher means more recent
-    game_status (int): `GameStatus` enum value that describes whether or not the game loop is running
+    game_status (GameStatus): `GameStatus` enum value that describes whether or not the game loop is running
 
     Provide custom game state attributes via keyword arguments or assign them later.
 
     # Attributes
-    game_status (int): see constructor argument of same name
+    game_status (GameStatus): see constructor argument of same name
     time_order (pygase.utils.Sqn): see constructor argument of same name
 
     `GameState` instances mainly consist of custom attributes that make up the game state.
 
     """
 
-    def __init__(self, time_order: int = 0, game_status: int = GameStatus.get("Paused"), **kwargs):
+    def __init__(self, time_order: int = 0, game_status: GameStatus = GameStatus.PAUSED, **kwargs):
         self.__dict__ = kwargs
         self.game_status = game_status
         self.time_order = Sqn(time_order)
 
     def is_paused(self) -> bool:
         """Return `True` if game is paused."""
-        return self.game_status == GameStatus.get("Paused")
+        return self.game_status == GameStatus.PAUSED
 
     # Check time ordering
     def __lt__(self, other) -> bool:
