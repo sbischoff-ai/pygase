@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 import pytest
@@ -14,6 +15,7 @@ from pygase.connection import (
     ClientPackage,
     ServerPackage,
     Connection,
+    ClientConnection,
     ConnectionStatus,
     DuplicateSequenceError,
     ProtocolIDMismatchError,
@@ -73,6 +75,10 @@ class TestConnection:
         assert ConnectionStatus.DISCONNECTED.value == 0
         assert ConnectionStatus.CONNECTED.value == 1
         assert ConnectionStatus.CONNECTING.value == 2
+
+    def test_client_connection_uses_asyncio_lock_for_game_state_updates(self):
+        client_connection = ClientConnection(("host", 1234), None)
+        assert isinstance(client_connection._game_state_update_lock, type(asyncio.Lock()))
 
     def test_recv_first_package(self):
         connection = Connection(("host", 1234), None)

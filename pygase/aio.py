@@ -6,7 +6,6 @@ import asyncio
 import functools
 import inspect
 import socket as _socket
-from contextlib import asynccontextmanager
 
 CancelledError = asyncio.CancelledError
 iscoroutinefunction = inspect.iscoroutinefunction
@@ -110,34 +109,6 @@ class UniversalQueue:
     async def task_done(self):
         """Mark the most recently retrieved task as completed."""
         self._queue.task_done()
-
-
-class TaskGroup:
-    """Keep track of spawned tasks and cancel them collectively."""
-
-    def __init__(self):
-        self._tasks = []
-
-    async def spawn(self, func, *args):
-        """Spawn a task and register it in the group."""
-        task = await spawn(func, *args)
-        self._tasks.append(task)
-        return task
-
-    async def cancel_remaining(self):
-        """Cancel all tasks tracked by this group."""
-        for task in self._tasks:
-            await task.cancel()
-
-
-@asynccontextmanager
-async def abide(lock):
-    """Asynchronously acquire/release a regular threading lock."""
-    await asyncio.to_thread(lock.acquire)
-    try:
-        yield
-    finally:
-        lock.release()
 
 
 class AsyncSocket:

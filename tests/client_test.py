@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import asyncio
 import threading
 import queue
 
@@ -24,6 +25,7 @@ class TestClient:
         with client.access_game_state() as game_state:
             assert game_state == client.connection.game_state_context.ressource
             assert game_state.__class__ == GameState
+        assert isinstance(client.connection._game_state_update_lock, type(asyncio.Lock()))
 
     def test_wait_until(self):
         client = Client()
