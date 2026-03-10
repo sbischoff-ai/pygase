@@ -30,7 +30,7 @@
 - Fast path (small, local edits that do not affect protocol, networking, or cross-module behavior):
   1. `uv run black pygase tests`
   2. `uv run pytest -m "not integration" tests/<affected_module>_test.py`
-  3. `uv run mypy pygase` (recommended if touching typed APIs)
+  3. `uv run mypy pygase` (required before finishing any task)
 - Full validation (required for protocol/network behavior edits, connection timing/ordering changes, or broad refactors):
   1. `uv run black pygase tests`
   2. `uv run pytest tests --doctest-modules --cov=pygase --cov-report=term-missing`
@@ -62,3 +62,8 @@
 - Editable documentation sources live in repository root files such as `README.md`, `getting-started.md`, and documentation build configuration (`pydocmd.yml`).
 - The `docs/` tree is generated site output (`site_dir: docs`) and should generally not be hand-edited; regenerate it from source files/config when docs content changes.
 - Search/navigation tooling may ignore generated `docs/` artifacts (for example via `.rgignore`) to reduce noise, but this does not change packaging/build behavior.
+
+## Completion gate for coding agents
+- Before marking work as done, always run static type checking: `uv run mypy pygase`.
+- Treat mypy failures as blocking; fix findings or explicitly document environment limitations if they prevent execution.
+
