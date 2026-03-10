@@ -301,7 +301,7 @@ class GameStateMachine:
 
         This function blocks as it continously progresses the game state through time
         but it can also be spawned as a coroutine or in a thread via #Server.run_game_loop_in_thread().
-        As long as the simulation is running, the `game_state.status` will be `GameStatus.get('Active')`.
+        As long as the simulation is running, the `game_state.status` will be `GameStatus.ACTIVE`.
 
         # Arguments
         interval (float): (minimum) duration in seconds between consecutive time steps
@@ -312,18 +312,16 @@ class GameStateMachine:
     @awaitable(run_game_loop)
     async def run_game_loop(self, interval: float = 0.02) -> None:  # pylint: disable=function-redefined
         # pylint: disable=missing-docstring
-        if self._game_state_store.get_game_state().game_status == GameStatus.get("Paused"):
+        if self._game_state_store.get_game_state().game_status == GameStatus.PAUSED:
             self._game_state_store.push_update(
-                GameStateUpdate(
-                    self._game_state_store.get_game_state().time_order + 1, game_status=GameStatus.get("Active")
-                )
+                GameStateUpdate(self._game_state_store.get_game_state().time_order + 1, game_status=GameStatus.ACTIVE)
             )
         game_state = self._game_state_store.get_game_state()
         dt = interval
         last_step_ts = None
         self._game_loop_is_running = True
         logger.info(f"State machine starting game loop with interval of {interval} seconds.")
-        while game_state.game_status == GameStatus.get("Active"):
+        while game_state.game_status == GameStatus.ACTIVE:
             loop_start = time.perf_counter()
             dt = interval if last_step_ts is None else loop_start - last_step_ts
             last_step_ts = loop_start
@@ -358,7 +356,7 @@ class GameStateMachine:
     def stop(self, timeout: float = 1.0) -> bool:
         """Pause the game simulation.
 
-        This sets `self.status` to `Gamestatus.get('Paused')`. This method can also be spawned as a coroutine.
+        This sets `self.status` to `GameStatus.PAUSED`. This method can also be spawned as a coroutine.
         A subsequent call of #GameStateMachine.run_game_loop() will resume the simulation at the point
         where it was stopped.
 
@@ -375,11 +373,9 @@ class GameStateMachine:
     async def stop(self, timeout: float = 1.0) -> bool:  # pylint: disable=function-redefined
         # pylint: disable=missing-docstring
         logger.info("Trying to stop game loop ...")
-        if self._game_state_store.get_game_state().game_status == GameStatus.get("Active"):
+        if self._game_state_store.get_game_state().game_status == GameStatus.ACTIVE:
             self._game_state_store.push_update(
-                GameStateUpdate(
-                    self._game_state_store.get_game_state().time_order + 1, game_status=GameStatus.get("Paused")
-                )
+                GameStateUpdate(self._game_state_store.get_game_state().time_order + 1, game_status=GameStatus.PAUSED)
             )
         t0 = time.time()
         while self._game_loop_is_running:

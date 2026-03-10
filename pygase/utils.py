@@ -6,7 +6,6 @@ Provides utilities used in PyGaSe code or helpful to users of this library.
 ### Contents
 - #Comparable: mixin that makes objects compare as equal if their type and attributes match
 - #Sendable: mixin that allows to serialize objects to small bytestrings
-- #NamedEnum: base class for lists of strings to be mapped to integer values
 - #Sqn: subclass of `int` for sequence numbers that always fit in 2 bytes
 - #LockedRessource: class that attaches a `threading.Lock` to a ressource
 - #get_available_ip_addresses: function that returns a list of local network interfaces
@@ -90,68 +89,6 @@ class Sendable(Comparable):
             return received_sendable
         except (umsgpack.InsufficientDataException, KeyError, TypeError) as exc:
             raise TypeError("Bytes could no be parsed into " + cls.__name__ + ".") from exc
-
-
-class NamedEnum:
-    """Map string labels to integer values.
-
-    This is a base class meant to be subclassed to produce a dynamic enum mapping type.
-
-    # Example
-    ```python
-    class MyEnum(NamedEnum):
-
-        '''Encode labels in integers.
-         - "foo"
-         - "bar"
-
-        '''
-
-
-    MyEnum.register("foo")
-    MyEnum.register("bar")
-
-    assert MyEnum.get("foo") == 1
-    assert MyEnum.get("bar") == 2
-    assert MyEnum.get(1) == "foo"
-    assert MyEnum.get(2) == "bar"
-    ```
-
-    """
-
-    _values: list = []
-
-    # should add advanced type checking for name_or_value
-    @classmethod
-    def get(cls, name_or_value):
-        """Get the value for a label or vice versa.
-
-        # Arguments
-        name_or_value (): label or value to de- or encode
-
-        # Returns
-        int value for given string label or vice versa
-
-        # Raises
-         TypeError: if argument is neither `int` nor `str`
-
-        """
-        if isinstance(name_or_value, int):
-            return cls._values[name_or_value]
-        if isinstance(name_or_value, str):
-            return cls._values.index(name_or_value)
-        raise TypeError
-
-    @classmethod
-    def register(cls, name: str) -> None:
-        """Add a new label to the mapping.
-
-        # Arguments
-        name (): string label to register as new enum value
-
-        """
-        if name not in cls._values:
-            cls._values.append(name)
 
 
 class Sqn(int):

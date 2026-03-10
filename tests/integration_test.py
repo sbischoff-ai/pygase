@@ -49,7 +49,7 @@ class TestIntegration:
             client_task = await aio.spawn(client.connect, server.port, server.hostname)
             await assert_timeout(3, lambda: client.connection is not None)
             state_machine_task = await aio.spawn(state_machine.run_game_loop)
-            await assert_timeout(3, lambda: state_store.get_game_state().game_status == GameStatus.get("Active"))
+            await assert_timeout(3, lambda: state_store.get_game_state().game_status == GameStatus.ACTIVE)
             await state_machine.stop()
             await state_machine_task.join()
             await client.disconnect(shutdown_server=client_shutdown)
