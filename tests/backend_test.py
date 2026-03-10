@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import asyncio
+
 from pygase import aio
 import pytest
 
@@ -22,10 +24,11 @@ class TestServer:
         server = Server(GameStateStore())
 
         async def test_task():
-            await aio.spawn(server.run, 1234)
+            server_task = asyncio.create_task(server.run(1234))
             await assert_timeout(3, lambda: server.hostname == "localhost")
             assert server._port == 1234
             await server.shutdown()
+            await server_task
             return True
 
         assert aio.run(test_task)

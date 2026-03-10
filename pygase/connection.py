@@ -19,6 +19,8 @@ This module is not supposed to be required by users of this library.
 """
 
 import time
+import asyncio
+from contextlib import suppress
 
 from pygase import aio
 from pygase.aio import socket, awaitable, iscoroutinefunction
@@ -486,7 +488,7 @@ class Connection:
         while True:
             try:
                 await self._handle_next_event()
-            except aio.CancelledError:
+            except asyncio.CancelledError:
                 break
         logger.debug(f"Stopped handling events from {self.remote_address}.")
 
@@ -501,7 +503,7 @@ class Connection:
 
         """
         logger.debug(f"Starting to send packages to {self.remote_address} every {self._package_interval} seconds.")
-        congestion_avoidance_task = await aio.spawn(self._congestion_avoidance_monitor)
+        congestion_avoidance_task = asyncio.create_task(self._congestion_avoidance_monitor())
         while True:
             try:
                 t0 = time.time()
@@ -511,10 +513,12 @@ class Connection:
                     break
                 await self._send_next_package(sock)
                 await aio.sleep(max([self._package_interval - time.time() + t0, 0]))
-            except aio.CancelledError:
+            except asyncio.CancelledError:
                 break
         logger.debug(f"Stopped sending packages to {self.remote_address}.")
-        await congestion_avoidance_task.cancel()
+        congestion_avoidance_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await congestion_avoidance_task
 
     def _create_next_package(self):
         """Create a package with the correct header to send next."""
@@ -580,7 +584,7 @@ class Connection:
             try:
                 self._throttling_state_machine(time.time(), state)
                 await aio.sleep(self._min_throttle_time / 2.0)
-            except aio.CancelledError:
+            except asyncio.CancelledError:
                 break
         logger.debug(f"Stopped congestion avoidance for connection to {self.remote_address}.")
 
@@ -637,6 +641,7 @@ class ClientConnection(Connection):
         super().__init__(remote_address, event_handler)
         self._command_queue = aio.UniversalQueue()
         self.game_state_context = LockedRessource(GameState())
+        self._game_state_update_lock = asyncio.Lock()
 
     def shutdown(self, shutdown_server: bool = False):
         """Shut down the client connection.
@@ -684,36 +689,38 @@ class ClientConnection(Connection):
         logger.info("Trying to connect to server ...")
         self._set_status(ConnectionStatus.CONNECTING)
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            send_loop_task = await aio.spawn(self._send_loop, sock)
-            recv_loop_task = await aio.spawn(self._client_recv_loop, sock)
-            event_loop_task = await aio.spawn(self._event_loop)
-            # check for disconnect event
-            while self.status != ConnectionStatus.DISCONNECTED:
-                command = await self._command_queue.get()
-                if command == "shutdown":
-                    logger.info(f"Sending shutdown command to server at {self.remote_address}.")
-                    await sock.sendto("shutdown".encode("utf-8"), self.remote_address)
-                    break
-                if command == "shut_me_down":
-                    break
-            logger.info(f"Shutting down connection to {self.remote_address}.")
-            await recv_loop_task.cancel()
-            await send_loop_task.cancel()
-            await event_loop_task.cancel()
-            self._set_status(ConnectionStatus.DISCONNECTED)
+            async with asyncio.TaskGroup() as task_group:
+                send_loop_task = task_group.create_task(self._send_loop(sock))
+                recv_loop_task = task_group.create_task(self._client_recv_loop(sock))
+                event_loop_task = task_group.create_task(self._event_loop())
+                # check for disconnect event
+                while self.status != ConnectionStatus.DISCONNECTED:
+                    command = await self._command_queue.get()
+                    if command == "shutdown":
+                        logger.info(f"Sending shutdown command to server at {self.remote_address}.")
+                        await sock.sendto("shutdown".encode("utf-8"), self.remote_address)
+                        break
+                    if command == "shut_me_down":
+                        break
+                logger.info(f"Shutting down connection to {self.remote_address}.")
+                recv_loop_task.cancel()
+                send_loop_task.cancel()
+                event_loop_task.cancel()
+                self._set_status(ConnectionStatus.DISCONNECTED)
 
     async def _recv(self, package: ServerPackage):
         """Extend #Connection._recv to update the game state."""
         await super()._recv(package)
-        async with aio.abide(self.game_state_context.lock):
-            logger.debug(
-                (
-                    f"Updating game state from time order "
-                    f"{self.game_state_context.ressource.time_order} to "
-                    f"{package.game_state_update.time_order}."
+        async with self._game_state_update_lock:
+            with self.game_state_context:
+                logger.debug(
+                    (
+                        f"Updating game state from time order "
+                        f"{self.game_state_context.ressource.time_order} to "
+                        f"{package.game_state_update.time_order}."
+                    )
                 )
-            )
-            self.game_state_context.ressource += package.game_state_update
+                self.game_state_context.ressource += package.game_state_update
 
     async def _client_recv_loop(self, sock):
         """Continously handle packages received from the server.
@@ -733,7 +740,7 @@ class ClientConnection(Connection):
                 data = await sock.recv(ServerPackage._max_size)  # pylint: disable=protected-access
                 package = ServerPackage.from_datagram(data)
                 await self._recv(package)
-            except aio.CancelledError:
+            except asyncio.CancelledError:
                 break
         logger.debug(f"Stopped receiving packages from {self.remote_address}.")
 
@@ -805,50 +812,56 @@ class ServerConnection(Connection):
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind((hostname, port))
             server._hostname, server._port = sock.getsockname()  # pylint: disable=protected-access
-            connection_tasks = aio.TaskGroup()
-            logger.info(f"Server successfully started and listening to packages from clients on {(hostname, port)}.")
-            while True:
-                data, client_address = await sock.recvfrom(Package._max_size)  # pylint: disable=protected-access
-                try:
-                    package = ClientPackage.from_datagram(data)
-                    # Create new connection if client is unknown.
-                    if client_address not in server.connections:
-                        logger.info(f"New client connection from {client_address}.")
-                        new_connection = cls(
-                            client_address,
-                            server._universal_event_handler,  # pylint: disable=protected-access
-                            server.game_state_store,
-                            package.time_order,
-                            event_wire,
-                        )
-                        await connection_tasks.spawn(
-                            new_connection._send_loop, sock  # pylint: disable=protected-access
-                        )
-                        await connection_tasks.spawn(new_connection._event_loop)  # pylint: disable=protected-access
-                        # For now, the first client connection becomes host.
-                        if server.host_client is None:
-                            logger.info(f"Setting {client_address} as client with host permissions.")
-                            server.host_client = client_address
-                        server.connections[client_address] = new_connection
-                    elif server.connections[client_address].status == ConnectionStatus.DISCONNECTED:
-                        # Start sending packages again, which will also set status to "Connected".
-                        logger.info(f"Client reconnecting from {client_address}.")
-                        await connection_tasks.spawn(
-                            server.connections[client_address]._send_loop, sock  # pylint: disable=protected-access
-                        )
-                    for event in package.events:
-                        event.handler_kwargs["client_address"] = client_address
-                    await server.connections[client_address]._recv(package)  # pylint: disable=protected-access
-                except ProtocolIDMismatchError:
-                    # ignore all non-PyGaSe packages
+            async with asyncio.TaskGroup() as connection_tasks:
+                connection_loop_tasks = []
+                logger.info(
+                    f"Server successfully started and listening to packages from clients on {(hostname, port)}."
+                )
+                while True:
+                    data, client_address = await sock.recvfrom(Package._max_size)  # pylint: disable=protected-access
                     try:
-                        if data.decode("utf-8") == "shutdown" and client_address == server.host_client:
-                            logger.info(f"Received shutdown command from host client {client_address}.")
-                            break
-                        if data.decode("utf-8") == "shut_me_down":
-                            break
-                        logger.warning("Received unknown package.")
-                    except UnicodeDecodeError:
-                        logger.warning("Received unknown package.")
-            logger.info(f"Shutting down server on {(hostname, port)}.")
-            await connection_tasks.cancel_remaining()
+                        package = ClientPackage.from_datagram(data)
+                        # Create new connection if client is unknown.
+                        if client_address not in server.connections:
+                            logger.info(f"New client connection from {client_address}.")
+                            new_connection = cls(
+                                client_address,
+                                server._universal_event_handler,  # pylint: disable=protected-access
+                                server.game_state_store,
+                                package.time_order,
+                                event_wire,
+                            )
+                            connection_loop_tasks.append(
+                                connection_tasks.create_task(new_connection._send_loop(sock))
+                            )  # pylint: disable=protected-access
+                            connection_loop_tasks.append(
+                                connection_tasks.create_task(new_connection._event_loop())
+                            )  # pylint: disable=protected-access
+                            # For now, the first client connection becomes host.
+                            if server.host_client is None:
+                                logger.info(f"Setting {client_address} as client with host permissions.")
+                                server.host_client = client_address
+                            server.connections[client_address] = new_connection
+                        elif server.connections[client_address].status == ConnectionStatus.DISCONNECTED:
+                            # Start sending packages again, which will also set status to "Connected".
+                            logger.info(f"Client reconnecting from {client_address}.")
+                            connection_loop_tasks.append(
+                                connection_tasks.create_task(server.connections[client_address]._send_loop(sock))
+                            )  # pylint: disable=protected-access
+                        for event in package.events:
+                            event.handler_kwargs["client_address"] = client_address
+                        await server.connections[client_address]._recv(package)  # pylint: disable=protected-access
+                    except ProtocolIDMismatchError:
+                        # ignore all non-PyGaSe packages
+                        try:
+                            if data.decode("utf-8") == "shutdown" and client_address == server.host_client:
+                                logger.info(f"Received shutdown command from host client {client_address}.")
+                                break
+                            if data.decode("utf-8") == "shut_me_down":
+                                break
+                            logger.warning("Received unknown package.")
+                        except UnicodeDecodeError:
+                            logger.warning("Received unknown package.")
+                logger.info(f"Shutting down server on {(hostname, port)}.")
+                for task in connection_loop_tasks:
+                    task.cancel()
