@@ -14,6 +14,7 @@ Provides utilities used in PyGaSe code or helpful to users of this library.
 
 import logging
 import socket
+from collections.abc import Mapping
 from threading import Lock
 from typing import Any
 
@@ -69,14 +70,24 @@ class Sendable(Comparable):
     """
 
     def to_dict(self) -> dict:
-        """Return a serializable dictionary representation of this object."""
+        """Return a serializable dictionary representation of this object.
+
+        Subclasses with non-trivial internal state should override this method together
+        with :meth:`from_dict` to implement a stable, explicit serialization protocol.
+
+        """
         return dict(self.__dict__)
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: Mapping[str, Any]):
         """Create an instance from a dictionary representation."""
+        if not isinstance(data, Mapping):
+            raise TypeError(f"Payload for {cls.__name__} must be a mapping.")
         received_sendable = object.__new__(cls)
-        received_sendable.__dict__ = data  # pylint: disable=attribute-defined-outside-init
+        for key, value in data.items():
+            if not isinstance(key, str):
+                raise TypeError(f"Payload keys for {cls.__name__} must be strings.")
+            setattr(received_sendable, key, value)
         return received_sendable
 
     def to_bytes(self) -> bytes:
@@ -94,10 +105,18 @@ class Sendable(Comparable):
         a copy of an object that was serialized via `Sendable.to_bytes`
 
         """
+        if not isinstance(bytepack, (bytes, bytearray, memoryview)):
+            raise TypeError(f"{cls.__name__}.from_bytes expects a bytes-like object.")
         try:
-            return cls.from_dict(umsgpack.unpackb(bytepack))
-        except (umsgpack.InsufficientDataException, KeyError, TypeError) as exc:
-            raise TypeError("Bytes could no be parsed into " + cls.__name__ + ".") from exc
+            payload = umsgpack.unpackb(bytepack)
+        except (umsgpack.InsufficientDataException, TypeError, ValueError) as exc:
+            raise ValueError(f"Bytes could not be parsed into {cls.__name__}.") from exc
+        if not isinstance(payload, Mapping):
+            raise TypeError(f"Decoded payload for {cls.__name__} must be a mapping.")
+        try:
+            return cls.from_dict(payload)
+        except (TypeError, ValueError, KeyError) as exc:
+            raise ValueError(f"Decoded payload for {cls.__name__} is malformed.") from exc
 
 
 class Sqn(int):

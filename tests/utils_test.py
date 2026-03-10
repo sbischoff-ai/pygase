@@ -1,5 +1,5 @@
 import pytest
-from pygase.utils import Sqn, Sendable, get_available_ip_addresses
+from pygase.utils import Sqn, Sendable, get_available_ip_addresses, umsgpack
 
 
 class TestSendable:
@@ -8,6 +8,15 @@ class TestSendable:
             def __init__(self, a, b):
                 self.a = a
                 self.b = b
+
+            def to_dict(self):
+                return {"a": self.a, "b": self.b, "hello": self.hello}
+
+            @classmethod
+            def from_dict(cls, data):
+                instance = cls(data["a"], data["b"])
+                instance.hello = data["hello"]
+                return instance
 
             def foo(self):
                 return "bar"
@@ -19,13 +28,42 @@ class TestSendable:
         assert unpacked_obj == obj
         assert unpacked_obj.foo() == "bar"
         with pytest.raises(TypeError) as exception:
+            SomeClass.from_bytes("not-msgpack")
+        assert str(exception.value) == "SomeClass.from_bytes expects a bytes-like object."
+
+        with pytest.raises(TypeError) as exception:
             SomeClass.from_bytes("This is not a Sendable".encode("utf-8"))
-        assert str(exception.value) == "Bytes could no be parsed into SomeClass."
+        assert str(exception.value) == "Decoded payload for SomeClass must be a mapping."
+
+        with pytest.raises(ValueError) as exception:
+            SomeClass.from_bytes(b"\x81\xa1a")
+        assert str(exception.value) == "Bytes could not be parsed into SomeClass."
+
+        malformed_payload = Sendable.from_dict({"a": 1}).to_bytes()
+        with pytest.raises(ValueError) as exception:
+            SomeClass.from_bytes(malformed_payload)
+        assert str(exception.value) == "Decoded payload for SomeClass is malformed."
+
+        with pytest.raises(TypeError) as exception:
+            SomeClass.from_bytes(umsgpack.packb(["not", "a", "mapping"]))
+        assert str(exception.value) == "Decoded payload for SomeClass must be a mapping."
 
         class SomeOtherClass(Sendable):
             pass
 
         assert SomeOtherClass() == SomeOtherClass.from_bytes(SomeOtherClass().to_bytes())
+
+    def test_from_dict_requires_mapping_and_string_keys(self):
+        class SomeClass(Sendable):
+            pass
+
+        with pytest.raises(TypeError) as exception:
+            SomeClass.from_dict([("a", 1)])
+        assert str(exception.value) == "Payload for SomeClass must be a mapping."
+
+        with pytest.raises(TypeError) as exception:
+            SomeClass.from_dict({1: "a"})
+        assert str(exception.value) == "Payload keys for SomeClass must be strings."
 
 
 class TestSqn:
