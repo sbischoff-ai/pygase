@@ -68,9 +68,20 @@ class Sendable(Comparable):
 
     """
 
+    def to_dict(self) -> dict:
+        """Return a serializable dictionary representation of this object."""
+        return dict(self.__dict__)
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        """Create an instance from a dictionary representation."""
+        received_sendable = object.__new__(cls)
+        received_sendable.__dict__ = data  # pylint: disable=attribute-defined-outside-init
+        return received_sendable
+
     def to_bytes(self) -> bytes:
         """Serialize the object to a compact bytestring."""
-        return umsgpack.packb(self.__dict__, force_float_precision="single")
+        return umsgpack.packb(self.to_dict(), force_float_precision="single")
 
     @classmethod
     def from_bytes(cls, bytepack: bytes):
@@ -84,9 +95,7 @@ class Sendable(Comparable):
 
         """
         try:
-            received_sendable = object.__new__(cls)
-            received_sendable.__dict__ = umsgpack.unpackb(bytepack)  # pylint: disable=attribute-defined-outside-init
-            return received_sendable
+            return cls.from_dict(umsgpack.unpackb(bytepack))
         except (umsgpack.InsufficientDataException, KeyError, TypeError) as exc:
             raise TypeError("Bytes could no be parsed into " + cls.__name__ + ".") from exc
 

@@ -10,7 +10,7 @@ def test_game_status_enum_values():
 
 class TestGameState:
     def test_bytepacking(self):
-        game_state = GameState()
+        game_state = GameState(time_order=3, game_status=GameStatus.ACTIVE, foo="bar")
         bytepack = game_state.to_bytes()
         unpacked_game_state = GameState.from_bytes(bytepack)
         assert game_state == unpacked_game_state
@@ -24,10 +24,23 @@ class TestGameState:
         paused_game_state.game_status = GameStatus.PAUSED
         assert game_state == paused_game_state
 
+    def test_custom_state_is_kept_in_data_dict(self):
+        game_state = GameState(player_hp=100)
+        assert game_state.data == {"player_hp": 100}
+        assert game_state.player_hp == 100
+        game_state.player_hp = 90
+        assert game_state.data["player_hp"] == 90
+
+    def test_structural_fields_are_not_overwritten_by_data(self):
+        game_state = GameState(time_order=4, game_status=GameStatus.ACTIVE, **{"data": "ignored"})
+        assert game_state.time_order == 4
+        assert game_state.game_status == GameStatus.ACTIVE
+        assert game_state.data == {"data": "ignored"}
+
 
 class TestGameStateUpdate:
     def test_bytepacking(self):
-        update = GameStateUpdate(5)
+        update = GameStateUpdate(5, game_status=GameStatus.ACTIVE, test="value")
         bytepack = update.to_bytes()
         unpacked_update = GameStateUpdate.from_bytes(bytepack)
         assert update == unpacked_update
@@ -62,3 +75,16 @@ class TestGameStateUpdate:
             + update
         )
         assert game_state.time_order == 5 and game_state.test[1] == "test1"
+
+    def test_update_can_set_game_status(self):
+        game_state = GameState(time_order=0, game_status=GameStatus.PAUSED)
+        game_state += GameStateUpdate(time_order=1, game_status=GameStatus.ACTIVE)
+        assert game_state.game_status == GameStatus.ACTIVE
+        assert game_state.time_order == 1
+
+    def test_structural_time_order_cannot_be_overwritten_by_payload(self):
+        update = GameStateUpdate.from_dict({"time_order": 3, "time_order_payload": 1})
+        game_state = GameState(time_order=0)
+        game_state += update
+        assert game_state.time_order == 3
+        assert game_state.time_order_payload == 1

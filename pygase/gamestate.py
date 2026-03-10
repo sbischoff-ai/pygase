@@ -9,9 +9,14 @@
 
 """
 
+from dataclasses import dataclass, field
 from enum import IntEnum
+from typing import Any
 
 from pygase.utils import Sendable, Sqn
+
+_RESERVED_GAME_STATE_FIELDS = {"time_order", "game_status", "data"}
+_RESERVED_UPDATE_FIELDS = {"time_order", "data"}
 
 # unique 4-byte token to mark GameState entries for deletion
 TO_DELETE: bytes = bytes.fromhex("d281e5ba")
@@ -29,6 +34,7 @@ class GameStatus(IntEnum):
     ACTIVE = 1
 
 
+@dataclass(init=False, eq=False)
 class GameState(Sendable):
     """Customize a serializable game state model.
 
@@ -51,10 +57,44 @@ class GameState(Sendable):
 
     """
 
+    time_order: Sqn = field(default_factory=lambda: Sqn(0))
+    game_status: GameStatus = GameStatus.PAUSED
+    data: dict[str, Any] = field(default_factory=dict)
+
     def __init__(self, time_order: int = 0, game_status: GameStatus = GameStatus.PAUSED, **kwargs):
-        self.__dict__ = kwargs
-        self.game_status = game_status
         self.time_order = Sqn(time_order)
+        self.game_status = game_status
+        self.data = dict(kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        if name in self.data:
+            return self.data[name]
+        raise AttributeError
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in {"time_order", "game_status", "data"}:
+            super().__setattr__(name, value)
+            return
+        self.data[name] = value
+
+    def __delattr__(self, name: str) -> None:
+        if name in self.data:
+            del self.data[name]
+            return
+        super().__delattr__(name)
+
+    def to_dict(self) -> dict:
+        """Return a serializable dictionary representation of this game state."""
+        custom_data = {key: value for key, value in self.data.items() if key not in _RESERVED_GAME_STATE_FIELDS}
+        return {**custom_data, "time_order": int(self.time_order), "game_status": int(self.game_status)}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "GameState":
+        """Create a `GameState` from a dictionary representation."""
+        state_data = {key: value for key, value in data.items() if key not in {"data"}}
+        time_order = state_data.pop("time_order", 0)
+        game_status = state_data.pop("game_status", GameStatus.PAUSED)
+        return cls(time_order=time_order, game_status=GameStatus(game_status), **state_data)
 
     def is_paused(self) -> bool:
         """Return `True` if game is paused."""
@@ -68,6 +108,7 @@ class GameState(Sendable):
         return self.time_order > other.time_order
 
 
+@dataclass(init=False, eq=False)
 class GameStateUpdate(Sendable):
     """Update a `GameState` object.
 
@@ -92,23 +133,50 @@ class GameStateUpdate(Sendable):
 
     """
 
+    time_order: Sqn = field(default_factory=lambda: Sqn(0))
+    data: dict[str, Any] = field(default_factory=dict)
+
     def __init__(self, time_order: int, **kwargs):
-        self.__dict__ = kwargs
         self.time_order = Sqn(time_order)
+        self.data = dict(kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        if name in self.data:
+            return self.data[name]
+        raise AttributeError
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in {"time_order", "data"}:
+            super().__setattr__(name, value)
+            return
+        self.data[name] = value
+
+    def __delattr__(self, name: str) -> None:
+        if name in self.data:
+            del self.data[name]
+            return
+        super().__delattr__(name)
+
+    def to_dict(self) -> dict:
+        """Return a serializable dictionary representation of this update."""
+        custom_data = {key: value for key, value in self.data.items() if key not in _RESERVED_UPDATE_FIELDS}
+        return {**custom_data, "time_order": int(self.time_order)}
 
     @classmethod
-    def from_bytes(cls, bytepack: bytes) -> "GameStateUpdate":
-        """Extend `Sendable.from_bytes` to make sure time_order is of type `Sqn`."""
-        update = super().from_bytes(bytepack)
-        update.time_order = Sqn(update.time_order)  # pylint: disable=no-member
-        return update
+    def from_dict(cls, data: dict) -> "GameStateUpdate":
+        """Create a `GameStateUpdate` from a dictionary representation."""
+        update_data = {key: value for key, value in data.items() if key not in {"data"}}
+        time_order = update_data.pop("time_order")
+        return cls(time_order=time_order, **update_data)
 
     def __add__(self, other: "GameStateUpdate") -> "GameStateUpdate":
         """Combine two updates."""
         if other > self:
-            _recursive_update(self.__dict__, other.__dict__)
+            _recursive_update(self.data, other.data)
+            self.time_order = other.time_order
             return self
-        _recursive_update(other.__dict__, self.__dict__)
+        _recursive_update(other.data, self.data)
+        other.time_order = self.time_order
         return other
 
     def __radd__(self, other):
@@ -119,7 +187,11 @@ class GameStateUpdate(Sendable):
             # list to 0.
             return self
         if self > other:
-            _recursive_update(other.__dict__, self.__dict__, delete=True)
+            payload = {key: value for key, value in self.data.items() if key != "game_status"}
+            _recursive_update(other.data, payload, delete=True)
+            other.time_order = self.time_order
+            if "game_status" in self.data and self.data["game_status"] != TO_DELETE:
+                other.game_status = GameStatus(self.data["game_status"])
         return other
 
     # Check time ordering

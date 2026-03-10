@@ -15,7 +15,8 @@ First we define our initial game state:
 # Let there be an imaginary enemy at position 0 with 100 health points.
 initial_game_state = GameState(position=0.0, hp=100)
 ```
-The `GameState` constructor uses keyword arguments to initialize game state attributes.
+The `GameState` constructor uses keyword arguments to initialize custom game state attributes
+(which are stored in `GameState.data` and exposed as attributes).
 (We have to use built-in types such as `int`, `str` or `dict`, so the game state is serializable.)
 In this case our game state resembles the dict `{"position": 0.0, "hp": 100}` at the start of the game.
 
