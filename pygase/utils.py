@@ -279,7 +279,7 @@ class LockedResource:
 
     @property
     def ressource(self):
-        """Deprecated alias for `resource`."""
+        """Return deprecated alias for `resource`."""
         warnings.warn(
             "LockedResource.ressource is deprecated, use LockedResource.resource instead.",
             DeprecationWarning,
@@ -289,7 +289,7 @@ class LockedResource:
 
     @ressource.setter
     def ressource(self, value):
-        """Deprecated alias setter for `resource`."""
+        """Set deprecated alias for `resource`."""
         warnings.warn(
             "LockedResource.ressource is deprecated, use LockedResource.resource instead.",
             DeprecationWarning,

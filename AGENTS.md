@@ -65,5 +65,7 @@
 
 ## Completion gate for coding agents
 - Before marking work as done, always run static type checking: `uv run mypy pygase`.
+- Before marking work as done, always run docstring style checks: `uv run pydocstyle pygase`.
 - Treat mypy failures as blocking; fix findings or explicitly document environment limitations if they prevent execution.
+- Treat pydocstyle failures as blocking; fix findings or explicitly document environment limitations if they prevent execution.
 
