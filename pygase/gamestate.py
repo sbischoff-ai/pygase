@@ -12,6 +12,7 @@
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
+from collections.abc import Mapping
 
 from pygase.utils import Sendable, Sqn
 
@@ -89,7 +90,7 @@ class GameState(Sendable):
         return {**custom_data, "time_order": int(self.time_order), "game_status": int(self.game_status)}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "GameState":
+    def from_dict(cls, data: Mapping[str, Any]) -> "GameState":
         """Create a `GameState` from a dictionary representation."""
         state_data = {key: value for key, value in data.items() if key not in {"data"}}
         time_order = state_data.pop("time_order", 0)
@@ -163,7 +164,7 @@ class GameStateUpdate(Sendable):
         return {**custom_data, "time_order": int(self.time_order)}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "GameStateUpdate":
+    def from_dict(cls, data: Mapping[str, Any]) -> "GameStateUpdate":
         """Create a `GameStateUpdate` from a dictionary representation."""
         update_data = {key: value for key, value in data.items() if key not in {"data"}}
         time_order = update_data.pop("time_order")
