@@ -17,7 +17,7 @@ import socket
 import warnings
 from collections.abc import Mapping
 from threading import Lock
-from typing import Any
+from typing import Generic, TypeVar
 
 try:
     import umsgpack
@@ -28,13 +28,13 @@ except ImportError:  # pragma: no cover - fallback for restricted test envs
         InsufficientDataException = ValueError
 
         @staticmethod
-        def packb(data, **kwargs):
+        def packb(data: object, **kwargs: object) -> bytes:
             """Pack message data with msgpack compatibility options."""
             kwargs.pop("force_float_precision", None)
             return msgpack.packb(data, use_bin_type=True)
 
         @staticmethod
-        def unpackb(data):
+        def unpackb(data: bytes | bytearray | memoryview) -> object:
             """Unpack message data with string decoding enabled."""
             return msgpack.unpackb(data, raw=False)
 
@@ -51,12 +51,12 @@ logger = logging.getLogger("PyGaSe")
 class Comparable:
     """Compare objects by equality of attributes."""
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, self.__class__):
             return self.__dict__ == other.__dict__
         return False
 
-    def __ne__(self, other) -> bool:
+    def __ne__(self, other: object) -> bool:
         return not self.__eq__(other)
 
 
@@ -80,7 +80,7 @@ class Sendable(Comparable):
         return dict(self.__dict__)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]):
+    def from_dict(cls, data: Mapping[str, object]) -> "Sendable":
         """Create an instance from a dictionary representation."""
         if not isinstance(data, Mapping):
             raise TypeError(f"Payload for {cls.__name__} must be a mapping.")
@@ -96,7 +96,7 @@ class Sendable(Comparable):
         return umsgpack.packb(self.to_dict(), force_float_precision="single")
 
     @classmethod
-    def from_bytes(cls, bytepack: bytes):
+    def from_bytes(cls, bytepack: bytes) -> "Sendable":
         """Deserialize a bytestring into an instance of this class.
 
         # Arguments
@@ -150,7 +150,7 @@ class Sqn(int):
         """Return the maximum sequence number after which `Sqn`s wrap back to 1."""
         return cls(cls._max_sequence)
 
-    def __new__(cls, value) -> "Sqn":
+    def __new__(cls, value: int | None) -> "Sqn":
         """Create a `Sqn` instance."""
         if value is None:
             value = 0
@@ -160,7 +160,7 @@ class Sqn(int):
             raise ValueError("sequence numbers must not be negative")
         return super(Sqn, cls).__new__(cls, value)  # type: ignore
 
-    def __add__(self, other) -> "Sqn":
+    def __add__(self, other: int) -> "Sqn":
         """Add sequence numbers.
 
         # Example
@@ -178,7 +178,7 @@ class Sqn(int):
             logger.debug(f"Sequence number wrap-over reached at maximum of {self._max_sequence}.")
         return self.__class__(result)
 
-    def __sub__(self, other) -> int:
+    def __sub__(self, other: int) -> int:
         """Calculate the difference between sequence numbers.
 
         # Example
@@ -197,7 +197,7 @@ class Sqn(int):
             result += self._max_sequence
         return int(result)
 
-    def __lt__(self, other) -> bool:
+    def __lt__(self, other: int) -> bool:
         """Check if sequence number is lower than `other`.
 
         # Example
@@ -211,7 +211,7 @@ class Sqn(int):
         """
         return super().__lt__(super().__add__((other - self)))
 
-    def __gt__(self, other) -> bool:
+    def __gt__(self, other: int) -> bool:
         """Check if sequence number is greater than `other`.
 
         # Example
@@ -239,7 +239,10 @@ class Sqn(int):
         return cls(super().from_bytes(bytestring, "big"))
 
 
-class LockedResource:
+ResourceT = TypeVar("ResourceT")
+
+
+class LockedResource(Generic[ResourceT]):
     """Access a resource in a thread-safe way.
 
     This class makes an object available via a context manager that essentially attaches a
@@ -262,23 +265,23 @@ class LockedResource:
 
     """
 
-    def __init__(self, resource: Any) -> None:
+    def __init__(self, resource: ResourceT) -> None:
         self.lock: Lock = Lock()
         self.resource = resource
 
-    def __enter__(self):
+    def __enter__(self) -> ResourceT:
         """Lock `resource` and return it."""
         self.lock.acquire()
         logger.debug(f"Acquired lock for {self.resource}.")
         return self.resource
 
-    def __exit__(self, exception_type, exception_value, traceback) -> None:
+    def __exit__(self, exception_type: object, exception_value: object, traceback: object) -> None:
         """Release the lock."""
         self.lock.release()
         logger.debug(f"Released lock for {self.resource}.")
 
     @property
-    def ressource(self):
+    def ressource(self) -> ResourceT:
         """Return deprecated alias for `resource`."""
         warnings.warn(
             "LockedResource.ressource is deprecated, use LockedResource.resource instead.",
@@ -288,7 +291,7 @@ class LockedResource:
         return self.resource
 
     @ressource.setter
-    def ressource(self, value):
+    def ressource(self, value: ResourceT) -> None:
         """Set deprecated alias for `resource`."""
         warnings.warn(
             "LockedResource.ressource is deprecated, use LockedResource.resource instead.",
@@ -298,10 +301,10 @@ class LockedResource:
         self.resource = value
 
 
-class LockedRessource(LockedResource):
+class LockedRessource(LockedResource[ResourceT]):
     """Deprecated alias for :class:`LockedResource`."""
 
-    def __init__(self, resource: Any) -> None:
+    def __init__(self, resource: ResourceT) -> None:
         warnings.warn(
             "LockedRessource is deprecated, use LockedResource instead.",
             DeprecationWarning,
@@ -314,7 +317,7 @@ def get_available_ip_addresses() -> list[str]:
     """Return a list of all locally available IPv4 addresses."""
     if ifaddr is None:
         addresses: set[str] = {"127.0.0.1"}
-        addr_infos: list[tuple[Any, ...]] = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)
+        addr_infos = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)
         for result in addr_infos:
             ip_addr = result[4][0]
             if isinstance(ip_addr, str) and ip_addr[:3] in {"10.", "172", "192", "127"}:
@@ -323,7 +326,11 @@ def get_available_ip_addresses() -> list[str]:
 
     detected_addresses: list[str] = []
     for adapter in ifaddr.get_adapters():
-        for ip_addr in adapter.ips:
-            if isinstance(ip_addr.ip, str) and ip_addr.is_IPv4 and ip_addr.ip[:3] in {"10.", "172", "192", "127"}:
-                detected_addresses.append(ip_addr.ip)
+        for adapter_ip in adapter.ips:
+            if (
+                isinstance(adapter_ip.ip, str)
+                and adapter_ip.is_IPv4
+                and adapter_ip.ip[:3] in {"10.", "172", "192", "127"}
+            ):
+                detected_addresses.append(adapter_ip.ip)
     return detected_addresses

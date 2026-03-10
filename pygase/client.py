@@ -8,13 +8,20 @@
 
 import time
 import threading
+from collections.abc import Callable
+from typing import Awaitable, Callable as TypingCallable, TypeVar, cast
+
+from pygase.gamestate import GameState
+from pygase.utils import LockedResource
 
 from pygase import aio
 from pygase.aio import awaitable
 
 from pygase.connection import ClientConnection
-from pygase.event import UniversalEventHandler, Event
+from pygase.event import UniversalEventHandler, Event, EventHandler
 from pygase.utils import logger
+
+ReturnT = TypeVar("ReturnT")
 
 
 class Client:
@@ -38,10 +45,15 @@ class Client:
 
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         logger.debug("Creating Client instance.")
-        self.connection = None
+        self.connection: ClientConnection | None = None
         self._universal_event_handler = UniversalEventHandler()
+
+    def _require_connection(self) -> ClientConnection:
+        if self.connection is None:
+            raise RuntimeError("Client is not connected.")
+        return self.connection
 
     def connect(self, port: int, hostname: str = "localhost") -> None:
         """Open a connection to a PyGaSe server.
@@ -55,13 +67,13 @@ class Client:
 
         """
         self.connection = ClientConnection((hostname, port), self._universal_event_handler)
-        aio.run(self.connection.loop)
+        aio.run(self._require_connection().loop)
 
     @awaitable(connect)
     async def connect(self, port: int, hostname: str = "localhost") -> None:  # pylint: disable=function-redefined
         # pylint: disable=missing-docstring
         self.connection = ClientConnection((hostname, port), self._universal_event_handler)
-        await self.connection.loop()
+        await cast(TypingCallable[[], Awaitable[None]], self._require_connection().loop)()
 
     def connect_in_thread(self, port: int, hostname: str = "localhost") -> threading.Thread:
         """Open a connection in a seperate thread.
@@ -73,7 +85,7 @@ class Client:
 
         """
         self.connection = ClientConnection((hostname, port), self._universal_event_handler)
-        thread = threading.Thread(target=aio.run, args=(self.connection.loop,))
+        thread = threading.Thread(target=aio.run, args=(self._require_connection().loop,))
         thread.start()
         return thread
 
@@ -87,14 +99,14 @@ class Client:
             (only has an effect if the client has host permissions)
 
         """
-        self.connection.shutdown(shutdown_server)
+        self._require_connection().shutdown(shutdown_server)
 
     @awaitable(disconnect)
     async def disconnect(self, shutdown_server: bool = False) -> None:  # pylint: disable=function-redefined
         # pylint: disable=missing-docstring
-        await self.connection.shutdown(shutdown_server)
+        await cast(TypingCallable[[bool], Awaitable[None]], self._require_connection().shutdown)(shutdown_server)
 
-    def access_game_state(self):
+    def access_game_state(self) -> LockedResource[GameState]:
         """Return a context manager to access the shared game state.
 
         Can be used in a `with` block to lock the synchronized `game_state` while working with it.
@@ -106,9 +118,9 @@ class Client:
         ```
 
         """
-        return self.connection.game_state_context
+        return self._require_connection().game_state_context
 
-    def wait_until(self, game_state_condition, timeout: float = 1.0) -> None:
+    def wait_until(self, game_state_condition: Callable[[GameState], bool], timeout: float = 1.0) -> None:
         """Block until a condition on the game state is satisfied.
 
         # Arguments
@@ -129,7 +141,7 @@ class Client:
                 raise TimeoutError("Condition not satisfied after timeout of " + str(timeout) + " seconds.")
             time.sleep(timeout / 100)
 
-    def try_to(self, function, timeout: float = 1.0):
+    def try_to(self, function: Callable[[GameState], ReturnT], timeout: float = 1.0) -> ReturnT:
         """Execute a function using game state attributes that might not yet exist.
 
         This method repeatedly tries to execute `function(game_state)`, ignoring #KeyError exceptions,
@@ -160,7 +172,14 @@ class Client:
                 raise TimeoutError("Condition not satisfied after timeout of " + str(timeout) + " seconds.")
             time.sleep(timeout / 100)
 
-    def dispatch_event(self, event_type: str, *args, retries: int = 0, ack_callback=None, **kwargs) -> None:
+    def dispatch_event(
+        self,
+        event_type: str,
+        *args: object,
+        retries: int = 0,
+        ack_callback: EventHandler | None = None,
+        **kwargs: object,
+    ) -> None:
         """Send an event to the server.
 
         # Arguments
@@ -178,16 +197,16 @@ class Client:
         event = Event(event_type, *args, **kwargs)
         if retries > 0:
 
-            def timeout_callback():
+            def timeout_callback() -> None:
                 self.dispatch_event(event_type, *args, retries=retries - 1, ack_callback=ack_callback, **kwargs)
                 logger.warning(f"Event of type {event_type} timed out. Retrying to send event to server.")
 
         else:
             timeout_callback = None
 
-        self.connection.dispatch_event(event, ack_callback, timeout_callback)
+        self._require_connection().dispatch_event(event, ack_callback, timeout_callback)
 
-    def register_event_handler(self, event_type: str, event_handler_function) -> None:
+    def register_event_handler(self, event_type: str, event_handler_function: EventHandler) -> None:
         """Register an event handler for a specific event type.
 
         # Arguments

@@ -10,8 +10,11 @@ Contains the basic components of the PyGaSe event framework.
 """
 
 from pygase.aio import iscoroutinefunction
+from typing import Awaitable, Callable, TypeAlias, cast
 
 from pygase.utils import Sendable, logger
+
+EventHandler: TypeAlias = Callable[..., object | Awaitable[object]]
 
 
 class Event(Sendable):
@@ -31,20 +34,20 @@ class Event(Sendable):
 
     """
 
-    def __init__(self, event_type: str, *args, **kwargs):
+    def __init__(self, event_type: str, *args: object, **kwargs: object) -> None:
         self.type: str = event_type
-        self.handler_args: list = list(args)
-        self.handler_kwargs: dict = kwargs
+        self.handler_args: list[object] = list(args)
+        self.handler_kwargs: dict[str, object] = kwargs
 
 
 class UniversalEventHandler:
     """Handle PyGaSe events with callback functions."""
 
-    def __init__(self):
-        self._event_handlers = {}
+    def __init__(self) -> None:
+        self._event_handlers: dict[str, EventHandler] = {}
 
     # additional type checking for handler function
-    def register_event_handler(self, event_type: str, event_handler_function) -> None:
+    def register_event_handler(self, event_type: str, event_handler_function: EventHandler) -> None:
         """Register an event handler for a specific event type.
 
         # Arguments
@@ -61,7 +64,7 @@ class UniversalEventHandler:
             raise TypeError(f"'{event_handler_function.__class__.__name__}' object is not callable.")
         self._event_handlers[event_type] = event_handler_function
 
-    async def handle(self, event: Event, **kwargs):
+    async def handle(self, event: Event, **kwargs: object) -> object:
         """Asynchronously invoke the appropriate handler function.
 
         This method is a coroutine and must be `await`ed.
@@ -75,9 +78,11 @@ class UniversalEventHandler:
         logger.debug(
             (f"Handling {event.type} event with args={event.handler_args} and kwargs={event.handler_kwargs}.")
         )
-        if iscoroutinefunction(self._event_handlers[event.type]):
-            return await self._event_handlers[event.type](*event.handler_args, **dict(event.handler_kwargs, **kwargs))
-        return self._event_handlers[event.type](*event.handler_args, **dict(event.handler_kwargs, **kwargs))
+        handler = self._event_handlers[event.type]
+        handler_result = handler(*event.handler_args, **dict(event.handler_kwargs, **kwargs))
+        if iscoroutinefunction(handler):
+            return await cast(Awaitable[object], handler_result)
+        return handler_result
 
     def has_event_type(self, event_type: str) -> bool:
         """Check if a handler was registered for `event_type`."""
