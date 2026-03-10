@@ -7,13 +7,14 @@ Provides utilities used in PyGaSe code or helpful to users of this library.
 - #Comparable: mixin that makes objects compare as equal if their type and attributes match
 - #Sendable: mixin that allows to serialize objects to small bytestrings
 - #Sqn: subclass of `int` for sequence numbers that always fit in 2 bytes
-- #LockedRessource: class that attaches a `threading.Lock` to a ressource
+- #LockedResource: class that attaches a `threading.Lock` to a resource
 - #get_available_ip_addresses: function that returns a list of local network interfaces
 
 """
 
 import logging
 import socket
+import warnings
 from collections.abc import Mapping
 from threading import Lock
 from typing import Any
@@ -225,7 +226,7 @@ class Sqn(int):
         return super().__gt__(super().__add__((other - self)))
 
     def to_sqn_bytes(self) -> bytes:
-        """Return representation of the number in exactly the currenly set bytesize.
+        """Return representation of the number in exactly the currently set bytesize.
 
         The default bytesize is 2.
 
@@ -238,43 +239,75 @@ class Sqn(int):
         return cls(super().from_bytes(bytestring, "big"))
 
 
-class LockedRessource:
-    """Access a ressource thread-safely.
+class LockedResource:
+    """Access a resource in a thread-safe way.
 
-    This class makes an object available via a context manager that essentialy attaches a
-    `threading.Lock` to it, that threads writing to this object should abide.
+    This class makes an object available via a context manager that essentially attaches a
+    `threading.Lock` to it that threads writing to this object should respect.
 
     Usage example:
     ```python
-    myRessource = { 'foo': 'bar' }
-    myLockedRessource = LockedRessource(myRessource)
-    with myLockedRessource() as ressource:
-        # do stuff without any other threads meddling with the ressource
+    my_resource = {"foo": "bar"}
+    my_locked_resource = LockedResource(my_resource)
+    with my_locked_resource as resource:
+        # do stuff without any other threads meddling with the resource
     ```
 
     # Arguments
-    ressource (): object to be wrapped
+    resource (): object to be wrapped
 
     # Attributes
-    lock (): `threading.Lock` that threads writing to `ressource` should abide.
-    ressource ()
+    lock (): `threading.Lock` that threads writing to `resource` should abide.
+    resource ()
 
     """
 
-    def __init__(self, ressource: Any) -> None:
+    def __init__(self, resource: Any) -> None:
         self.lock: Lock = Lock()
-        self.ressource = ressource
+        self.resource = resource
 
     def __enter__(self):
-        """Lock `ressource` and return it."""
+        """Lock `resource` and return it."""
         self.lock.acquire()
-        logger.debug(f"Acquired lock for {self.ressource}.")
-        return self.ressource
+        logger.debug(f"Acquired lock for {self.resource}.")
+        return self.resource
 
     def __exit__(self, exception_type, exception_value, traceback) -> None:
         """Release the lock."""
         self.lock.release()
-        logger.debug(f"Released lock for {self.ressource}.")
+        logger.debug(f"Released lock for {self.resource}.")
+
+    @property
+    def ressource(self):
+        """Deprecated alias for `resource`."""
+        warnings.warn(
+            "LockedResource.ressource is deprecated, use LockedResource.resource instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.resource
+
+    @ressource.setter
+    def ressource(self, value):
+        """Deprecated alias setter for `resource`."""
+        warnings.warn(
+            "LockedResource.ressource is deprecated, use LockedResource.resource instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.resource = value
+
+
+class LockedRessource(LockedResource):
+    """Deprecated alias for :class:`LockedResource`."""
+
+    def __init__(self, resource: Any) -> None:
+        warnings.warn(
+            "LockedRessource is deprecated, use LockedResource instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(resource)
 
 
 def get_available_ip_addresses() -> list[str]:

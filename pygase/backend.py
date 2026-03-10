@@ -299,7 +299,7 @@ class GameStateMachine:
     def run_game_loop(self, interval: float = 0.02) -> None:
         """Simulate the game world.
 
-        This function blocks as it continously progresses the game state through time
+        This function blocks as it continuously progresses the game state through time
         but it can also be spawned as a coroutine or in a thread via #Server.run_game_loop_in_thread().
         As long as the simulation is running, the `game_state.status` will be `GameStatus.ACTIVE`.
 
@@ -364,7 +364,7 @@ class GameStateMachine:
         timeout (float): time in seconds to wait for the simulation to stop
 
         # Returns
-        bool: wether or not the simulation was successfully stopped
+        bool: whether or not the simulation was successfully stopped
 
         """
         return aio.run(self.stop, timeout)

@@ -33,7 +33,7 @@ The `time_step` function represents one iteration of the game loop and takes the
 in order to return a `dict` containing all the changes to the game state. By default it will be called 50 times per
 second (or once every 0.02 seconds, respectively). However, the actual interval may turn out somewhat longer and differ
 from time to time, which is why the time step function also gets the time since the last time step in seconds (`dt`).
-In this example our game loop will have the enemies `position` continously oscillating between -1.0 and 1.0.
+In this example our game loop will have the enemies `position` continuously oscillating between -1.0 and 1.0.
 
 ---
 *The backend should always have authority over the game logic and be the single point of truth for the shared state.*
