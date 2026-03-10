@@ -65,6 +65,14 @@ uv run pre-commit install
 ```
 
 After installing, `pre-commit` runs Black automatically on staged Python files during `git commit`.
+Type checking is part of the developer validation flow. Run:
+
+```bash
+uv run mypy pygase
+```
+
+The `mypy.ini` configuration now enforces `disallow_untyped_defs` incrementally for core runtime modules (`pygase.client`, `pygase.backend`, `pygase.connection`, `pygase.event`, and `pygase.utils`) to steadily raise typing strictness without requiring an all-at-once migration.
+
 If formatting updates are needed, the hook rewrites files and the commit stops so you can re-stage and retry.
 You can also run all configured hooks manually with:
 

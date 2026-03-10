@@ -21,6 +21,8 @@ This module is not supposed to be required by users of this library.
 import time
 import asyncio
 from contextlib import suppress
+from collections.abc import Callable
+from typing import Protocol, cast
 
 from pygase import aio
 from pygase.aio import socket, awaitable, iscoroutinefunction
@@ -28,10 +30,43 @@ from pygase.aio import socket, awaitable, iscoroutinefunction
 from enum import IntEnum
 
 from pygase.utils import Sqn, LockedResource, Comparable, logger
-from pygase.event import Event
+from pygase.event import Event, EventHandler
 from pygase.gamestate import GameState, GameStateUpdate
 
 PROTOCOL_ID: bytes = bytes.fromhex("ffd0fab9")  # unique 4 byte identifier for pygase packages
+
+
+class EventHandlerProtocol(Protocol):
+    """Protocol for event handler registries used by connections."""
+
+    def has_event_type(self, event_type: str) -> bool: ...
+
+    async def handle(self, event: Event, **kwargs: object) -> object: ...
+
+
+class EventWire(Protocol):
+    """Protocol for components that can receive forwarded events."""
+
+    async def _push_event(self, event: Event) -> None: ...
+
+
+class GameStateStoreProtocol(Protocol):
+    """Protocol for game-state stores consumed by server connections."""
+
+    def get_update_cache(self) -> list[GameStateUpdate]: ...
+
+    def get_game_state(self) -> GameState: ...
+
+
+class ServerProtocol(Protocol):
+    """Protocol for server state accessed in the server connection loop."""
+
+    _hostname: str | None
+    _port: int | None
+    _universal_event_handler: EventHandlerProtocol
+    game_state_store: GameStateStoreProtocol
+    connections: dict[tuple[str, int], "ServerConnection"]
+    host_client: tuple[str, int] | None
 
 
 class ProtocolIDMismatchError(ValueError):
@@ -286,7 +321,7 @@ class ServerPackage(Package):
         """Override #Package.from_datagram to include `game_state_update`."""
         header, payload = Header.deconstruct_datagram(datagram)
         state_update_bytesize = int.from_bytes(payload[:2], "big")
-        game_state_update = GameStateUpdate.from_bytes(payload[2 : state_update_bytesize + 2])
+        game_state_update = cast(GameStateUpdate, GameStateUpdate.from_bytes(payload[2 : state_update_bytesize + 2]))
         payload = payload[state_update_bytesize + 2 :]
         events = cls._read_out_event_block(payload)
         result = cls(header, game_state_update, events)
@@ -350,10 +385,15 @@ class Connection:
     }  # maps connection.quality to time between sent packages in seconds
     _latency_threshold: float = 0.25  # latency that will trigger throttling
 
-    def __init__(self, remote_address: tuple, event_handler, event_wire=None):
+    def __init__(
+        self,
+        remote_address: tuple[str, int],
+        event_handler: EventHandlerProtocol,
+        event_wire: EventWire | None = None,
+    ) -> None:
         logger.debug(f"Creating connection instance for remote address {remote_address}.")
         self.remote_address = remote_address
-        self.event_handler = event_handler
+        self.event_handler: EventHandlerProtocol = event_handler
         self.event_wire = event_wire
         self.local_sequence = Sqn(0)
         self.remote_sequence = Sqn(0)
@@ -370,7 +410,7 @@ class Connection:
         self._event_callbacks: dict = {}
         self._last_recv = time.time()
 
-    def _update_remote_info(self, received_sequence: Sqn):
+    def _update_remote_info(self, received_sequence: Sqn) -> None:
         """Update `self.remote_sequence` and `self.ack_bitfield`."""
         if self.remote_sequence == 0:
             self.remote_sequence = received_sequence
@@ -389,7 +429,7 @@ class Connection:
                 raise DuplicateSequenceError
             self.ack_bitfield = self.ack_bitfield[: sequence_diff - 1] + "1" + self.ack_bitfield[sequence_diff:]
 
-    async def _recv(self, package):
+    async def _recv(self, package: Package) -> None:
         """Handle a received package.
 
         Update `self.remote_sequence` and `self.ack_bitfield` based on `package`, resolve package loss
@@ -422,7 +462,7 @@ class Connection:
                 logger.debug("Pushing event to event wire.")
                 await self.event_wire._push_event(event)  # pylint: disable=protected-access
 
-    async def _handle_ack(self, acked_sequence):
+    async def _handle_ack(self, acked_sequence: Sqn) -> None:
         self._update_latency(time.time() - self._pending_acks[acked_sequence])
         if acked_sequence in self._events_with_callbacks:
             for event_sequence in self._events_with_callbacks[acked_sequence]:
@@ -435,7 +475,7 @@ class Connection:
             del self._events_with_callbacks[acked_sequence]
         del self._pending_acks[acked_sequence]
 
-    async def _handle_timeout(self, timed_out_sequence):
+    async def _handle_timeout(self, timed_out_sequence: Sqn) -> None:
         if timed_out_sequence in self._events_with_callbacks:
             for event_sequence in self._events_with_callbacks[timed_out_sequence]:
                 if self._event_callbacks[event_sequence]["timeout"] is not None:
@@ -447,7 +487,12 @@ class Connection:
             del self._events_with_callbacks[timed_out_sequence]
         del self._pending_acks[timed_out_sequence]
 
-    def dispatch_event(self, event: Event, ack_callback=None, timeout_callback=None):
+    def dispatch_event(
+        self,
+        event: Event,
+        ack_callback: Callable[[], object] | None = None,
+        timeout_callback: Callable[[], object] | None = None,
+    ) -> None:
         """Send an event to the connection partner.
 
         # Arguments
@@ -467,7 +512,7 @@ class Connection:
         self._outgoing_event_queue.put((event, callback_sequence))
         logger.debug(f"Dispatched event of type {event.type} to be sent to {self.remote_address}.")
 
-    async def _handle_next_event(self):
+    async def _handle_next_event(self) -> None:
         """Handle an event from the incoming event queue.
 
         This coroutine returns once the handler has finished.
@@ -478,7 +523,7 @@ class Connection:
             await self.event_handler.handle(event)
         await self._incoming_event_queue.task_done()
 
-    async def _event_loop(self):
+    async def _event_loop(self) -> None:
         """Continously handle incoming events.
 
         This coroutine, once spawned, will keep handling events until it is explicitly cancelled.
@@ -492,7 +537,7 @@ class Connection:
                 break
         logger.debug(f"Stopped handling events from {self.remote_address}.")
 
-    async def _send_loop(self, sock):
+    async def _send_loop(self, sock: aio.AsyncSocket) -> None:
         """Continously send packages to the connection partner.
 
         This coroutine, once spawned, will keep sending packages to the remote_address until it is explicitly
@@ -520,11 +565,11 @@ class Connection:
         with suppress(asyncio.CancelledError):
             await congestion_avoidance_task
 
-    def _create_next_package(self):
+    def _create_next_package(self) -> Package:
         """Create a package with the correct header to send next."""
         return Package(Header(self.local_sequence, self.remote_sequence, self.ack_bitfield))
 
-    async def _send_next_package(self, sock):
+    async def _send_next_package(self, sock: aio.AsyncSocket) -> None:
         """Send a package with up to 5 events.
 
         This coroutine returns once the package is sent.
@@ -554,12 +599,12 @@ class Connection:
         logger.debug(f"Sent package with sequence number {package.header.sequence} to {self.remote_address}.")
         self._pending_acks[package.header.sequence] = time.time()
 
-    def _set_status(self, status: ConnectionStatus):
+    def _set_status(self, status: ConnectionStatus) -> None:
         """Set `self.status` to a new #ConnectionStatus value."""
         self.status = status
         logger.info(f"Status of connection to {self.remote_address} set to '{status.name}'.")
 
-    def _update_latency(self, rtt: int):
+    def _update_latency(self, rtt: float) -> None:
         """Update `self.latency` according to a measured rount trip time.
 
         Network jitter is filtered through a moving exponential average.
@@ -567,7 +612,7 @@ class Connection:
         """
         self.latency += 0.1 * (rtt - self.latency)
 
-    async def _congestion_avoidance_monitor(self):
+    async def _congestion_avoidance_monitor(self) -> None:
         """Continously monitor connection quality and throttle if needed.
 
         This coroutine will keep adjusting `self.quality` and throttling the rate at which packages are sent
@@ -588,7 +633,7 @@ class Connection:
                 break
         logger.debug(f"Stopped congestion avoidance for connection to {self.remote_address}.")
 
-    def _throttling_state_machine(self, t: int, state: dict):
+    def _throttling_state_machine(self, t: float, state: dict[str, float]) -> None:
         """Calculate a new state for congestion avoidance."""
         if self.quality == "good":
             if self.latency > self._latency_threshold:  # switch to bad mode
@@ -637,13 +682,13 @@ class ClientConnection(Connection):
 
     """
 
-    def __init__(self, remote_address: tuple, event_handler):
+    def __init__(self, remote_address: tuple[str, int], event_handler: EventHandlerProtocol) -> None:
         super().__init__(remote_address, event_handler)
         self._command_queue = aio.UniversalQueue()
         self.game_state_context = LockedResource(GameState())
         self._game_state_update_lock = asyncio.Lock()
 
-    def shutdown(self, shutdown_server: bool = False):
+    def shutdown(self, shutdown_server: bool = False) -> None:
         """Shut down the client connection.
 
         This method can also be spawned as a coroutine.
@@ -656,7 +701,7 @@ class ClientConnection(Connection):
         aio.run(self.shutdown, shutdown_server)
 
     @awaitable(shutdown)
-    async def shutdown(self, shutdown_server: bool = False):  # pylint: disable=function-redefined
+    async def shutdown(self, shutdown_server: bool = False) -> None:  # pylint: disable=function-redefined
         # pylint: disable=missing-docstring
         if shutdown_server:
             await self._command_queue.put("shutdown")
@@ -669,12 +714,12 @@ class ClientConnection(Connection):
             )
         )
 
-    def _create_next_package(self):
+    def _create_next_package(self) -> ClientPackage:
         """Override #Connection._create_next_package to send a #ClientPackage."""
         time_order = self.game_state_context.resource.time_order
         return ClientPackage(Header(self.local_sequence, self.remote_sequence, self.ack_bitfield), time_order)
 
-    def loop(self):
+    def loop(self) -> None:
         """Continuously operate the connection.
 
         This method will keep sending and receiving packages and handling events until it is cancelled or
@@ -684,7 +729,7 @@ class ClientConnection(Connection):
         aio.run(self.loop)
 
     @awaitable(loop)
-    async def loop(self):  # pylint: disable=function-redefined
+    async def loop(self) -> None:  # pylint: disable=function-redefined
         # pylint: disable=missing-docstring
         logger.info("Trying to connect to server ...")
         self._set_status(ConnectionStatus.CONNECTING)
@@ -708,21 +753,22 @@ class ClientConnection(Connection):
                 event_loop_task.cancel()
                 self._set_status(ConnectionStatus.DISCONNECTED)
 
-    async def _recv(self, package: ServerPackage):
+    async def _recv(self, package: Package) -> None:
         """Extend #Connection._recv to update the game state."""
         await super()._recv(package)
         async with self._game_state_update_lock:
             with self.game_state_context:
-                logger.debug(
-                    (
-                        f"Updating game state from time order "
-                        f"{self.game_state_context.resource.time_order} to "
-                        f"{package.game_state_update.time_order}."
+                if isinstance(package, ServerPackage):
+                    logger.debug(
+                        (
+                            f"Updating game state from time order "
+                            f"{self.game_state_context.resource.time_order} to "
+                            f"{package.game_state_update.time_order}."
+                        )
                     )
-                )
-                self.game_state_context.resource += package.game_state_update
+                    self.game_state_context.resource += package.game_state_update
 
-    async def _client_recv_loop(self, sock):
+    async def _client_recv_loop(self, sock: aio.AsyncSocket) -> None:
         """Continuously handle packages received from the server.
 
         This coroutine, once spawned, will keep receiving packages from the server until it is explicitly
@@ -760,13 +806,18 @@ class ServerConnection(Connection):
     """
 
     def __init__(
-        self, remote_address: tuple, event_handler, game_state_store, last_client_time_order: Sqn, event_wire=None
+        self,
+        remote_address: tuple[str, int],
+        event_handler: EventHandlerProtocol,
+        game_state_store: GameStateStoreProtocol,
+        last_client_time_order: Sqn,
+        event_wire: EventWire | None = None,
     ):
         super().__init__(remote_address, event_handler, event_wire)
         self.game_state_store = game_state_store
         self.last_client_time_order = last_client_time_order
 
-    def _create_next_package(self):
+    def _create_next_package(self) -> ServerPackage:
         """Override #Connection._create_next_package to include game state updates."""
         update_cache = self.game_state_store.get_update_cache()
         # Respond by sending the sum of all updates since the client's time-order point.
@@ -786,13 +837,14 @@ class ServerConnection(Connection):
             )
         return ServerPackage(Header(self.local_sequence, self.remote_sequence, self.ack_bitfield), update)
 
-    async def _recv(self, package: ClientPackage):
+    async def _recv(self, package: Package) -> None:
         """Extend #Connection._recv to update `self.last_client_time_order`."""
         await super()._recv(package)
-        self.last_client_time_order = package.time_order
+        if isinstance(package, ClientPackage):
+            self.last_client_time_order = package.time_order
 
     @classmethod
-    async def loop(cls, hostname: str, port: int, server, event_wire) -> None:
+    async def loop(cls, hostname: str, port: int, server: object, event_wire: EventWire | None) -> None:
         """Continously orchestrate and operate connections to clients.
 
         This coroutine will keep listening for client packages, create new #ServerConnection objects
@@ -809,9 +861,10 @@ class ServerConnection(Connection):
 
         """
         logger.info(f"Trying to run server on {(hostname, port)} ...")
+        server_state = cast(ServerProtocol, server)
         async with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind((hostname, port))
-            server._hostname, server._port = sock.getsockname()  # pylint: disable=protected-access
+            server_state._hostname, server_state._port = sock.getsockname()  # pylint: disable=protected-access
             async with asyncio.TaskGroup() as connection_tasks:
                 connection_loop_tasks = []
                 logger.info(
@@ -822,12 +875,12 @@ class ServerConnection(Connection):
                     try:
                         package = ClientPackage.from_datagram(data)
                         # Create new connection if client is unknown.
-                        if client_address not in server.connections:
+                        if client_address not in server_state.connections:
                             logger.info(f"New client connection from {client_address}.")
                             new_connection = cls(
                                 client_address,
-                                server._universal_event_handler,  # pylint: disable=protected-access
-                                server.game_state_store,
+                                server_state._universal_event_handler,  # pylint: disable=protected-access
+                                server_state.game_state_store,
                                 package.time_order,
                                 event_wire,
                             )
@@ -838,23 +891,25 @@ class ServerConnection(Connection):
                                 connection_tasks.create_task(new_connection._event_loop())
                             )  # pylint: disable=protected-access
                             # For now, the first client connection becomes host.
-                            if server.host_client is None:
+                            if server_state.host_client is None:
                                 logger.info(f"Setting {client_address} as client with host permissions.")
-                                server.host_client = client_address
-                            server.connections[client_address] = new_connection
-                        elif server.connections[client_address].status == ConnectionStatus.DISCONNECTED:
+                                server_state.host_client = client_address
+                            server_state.connections[client_address] = new_connection
+                        elif server_state.connections[client_address].status == ConnectionStatus.DISCONNECTED:
                             # Start sending packages again, which will also set status to "Connected".
                             logger.info(f"Client reconnecting from {client_address}.")
                             connection_loop_tasks.append(
-                                connection_tasks.create_task(server.connections[client_address]._send_loop(sock))
+                                connection_tasks.create_task(server_state.connections[client_address]._send_loop(sock))
                             )  # pylint: disable=protected-access
                         for event in package.events:
                             event.handler_kwargs["client_address"] = client_address
-                        await server.connections[client_address]._recv(package)  # pylint: disable=protected-access
+                        await server_state.connections[client_address]._recv(
+                            package
+                        )  # pylint: disable=protected-access
                     except ProtocolIDMismatchError:
                         # ignore all non-PyGaSe packages
                         try:
-                            if data.decode("utf-8") == "shutdown" and client_address == server.host_client:
+                            if data.decode("utf-8") == "shutdown" and client_address == server_state.host_client:
                                 logger.info(f"Received shutdown command from host client {client_address}.")
                                 break
                             if data.decode("utf-8") == "shut_me_down":

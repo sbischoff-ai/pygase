@@ -13,13 +13,14 @@ Provides the `Server` class and all PyGaSe components that deal with progression
 
 import time
 import threading
+from collections.abc import Callable, Mapping
 
 from pygase import aio
 from pygase.aio import socket, awaitable
 
-from pygase.connection import ServerConnection
+from pygase.connection import ServerConnection, EventWire
 from pygase.gamestate import GameState, GameStateUpdate, GameStatus
-from pygase.event import UniversalEventHandler, Event
+from pygase.event import UniversalEventHandler, Event, EventHandler
 from pygase.utils import logger
 
 
@@ -45,7 +46,7 @@ class GameStateStore:
             )
         self._game_state_update_cache = [GameStateUpdate(0)]
 
-    def get_update_cache(self) -> list:
+    def get_update_cache(self) -> list[GameStateUpdate]:
         """Return the latest state updates."""
         return self._game_state_update_cache.copy()
 
@@ -99,11 +100,11 @@ class Server:
         self.connections: dict = {}
         self.host_client: tuple = None
         self.game_state_store = game_state_store
-        self._universal_event_handler = UniversalEventHandler()
+        self._universal_event_handler: UniversalEventHandler = UniversalEventHandler()
         self._hostname: str = None
         self._port: int = None
 
-    def run(self, port: int = 0, hostname: str = "localhost", event_wire=None) -> None:
+    def run(self, port: int = 0, hostname: str = "localhost", event_wire: EventWire | None = None) -> None:
         """Start the server under a specified address.
 
         This is a blocking function but can also be spawned as a coroutine or in a thread
@@ -122,13 +123,13 @@ class Server:
 
     @awaitable(run)
     async def run(  # pylint: disable=function-redefined
-        self, port: int = 0, hostname: str = "localhost", event_wire=None
+        self, port: int = 0, hostname: str = "localhost", event_wire: EventWire | None = None
     ) -> None:
         # pylint: disable=missing-docstring
         await ServerConnection.loop(hostname, port, self, event_wire)
 
     def run_in_thread(
-        self, port: int = 0, hostname: str = "localhost", event_wire=None, daemon=True
+        self, port: int = 0, hostname: str = "localhost", event_wire: EventWire | None = None, daemon: bool = True
     ) -> threading.Thread:
         """Start the server in a seperate thread.
 
@@ -177,7 +178,13 @@ class Server:
 
     # advanced type checking for target client and callback would be helpful
     def dispatch_event(
-        self, event_type: str, *args, target_client="all", retries: int = 0, ack_callback=None, **kwargs
+        self,
+        event_type: str,
+        *args: object,
+        target_client: tuple[str, int] | str = "all",
+        retries: int = 0,
+        ack_callback: EventHandler | None = None,
+        **kwargs: object,
     ) -> None:
         """Send an event to one or all clients.
 
@@ -194,14 +201,14 @@ class Server:
         """
         event = Event(event_type, *args, **kwargs)
 
-        def get_ack_callback(connection):
+        def get_ack_callback(connection: object) -> Callable[[], object] | None:
             if ack_callback is not None:
                 return lambda: ack_callback(connection)
             return None
 
         if retries > 0:
 
-            def timeout_callback():
+            def timeout_callback() -> None:
                 self.dispatch_event(
                     event_type,
                     *args,
@@ -224,7 +231,7 @@ class Server:
             )
 
     # add advanced type checking for handler functions
-    def register_event_handler(self, event_type: str, event_handler_function) -> None:
+    def register_event_handler(self, event_type: str, event_handler_function: EventHandler) -> None:
         """Register an event handler for a specific event type.
 
         # Arguments
@@ -254,7 +261,7 @@ class GameStateMachine:
         logger.debug("Creating GameStateMachine instance.")
         self.game_time: float = 0.0
         self._event_queue = aio.UniversalQueue()
-        self._universal_event_handler = UniversalEventHandler()
+        self._universal_event_handler: UniversalEventHandler = UniversalEventHandler()
         self._game_state_store = game_state_store
         self._game_loop_is_running = False
 
@@ -273,7 +280,7 @@ class GameStateMachine:
         await self._event_queue.put(event)
 
     # advanced type checking for the handler function would be helpful
-    def register_event_handler(self, event_type: str, event_handler_function) -> None:
+    def register_event_handler(self, event_type: str, event_handler_function: EventHandler) -> None:
         """Register an event handler for a specific event type.
 
         For event handlers to have any effect, the events have to be wired from a #Server to
@@ -329,7 +336,8 @@ class GameStateMachine:
             while not self._event_queue.empty():
                 event = await self._event_queue.get()
                 event_update = await self._universal_event_handler.handle(event, game_state=game_state, dt=dt)
-                update_dict.update(event_update)
+                if isinstance(event_update, Mapping):
+                    update_dict.update(event_update)
                 if time.perf_counter() - loop_start > 0.95 * interval:
                     break
             self._game_state_store.push_update(GameStateUpdate(game_state.time_order + 1, **update_dict))
@@ -384,7 +392,7 @@ class GameStateMachine:
             await aio.sleep(0)
         return not self._game_loop_is_running
 
-    def time_step(self, game_state: GameState, dt: float) -> dict:
+    def time_step(self, game_state: GameState, dt: float) -> dict[str, object]:
         """Calculate a game state update.
 
         This method should be implemented to return a dict with all the updated state attributes.
@@ -430,7 +438,12 @@ class Backend:
 
     """
 
-    def __init__(self, initial_game_state: GameState, time_step_function, event_handlers: dict = None):
+    def __init__(
+        self,
+        initial_game_state: GameState,
+        time_step_function: Callable[[GameState, float], Mapping[str, object]],
+        event_handlers: dict[str, EventHandler] | None = None,
+    ) -> None:
         logger.info("Assembling Backend ...")
         self.game_state_store = GameStateStore(initial_game_state)
         self.game_state_machine = GameStateMachine(self.game_state_store)
@@ -441,7 +454,7 @@ class Backend:
         self.server = Server(self.game_state_store)
         logger.info("Backend assembled and ready.")
 
-    def run(self, hostname: str, port: int, interval: float = 0.02):
+    def run(self, hostname: str, port: int, interval: float = 0.02) -> None:
         """Run state machine and server and bind the server to a given address.
 
         # Arguments
@@ -456,6 +469,6 @@ class Backend:
         self.game_state_machine.stop()
         logger.info("Backend successfully shut down.")
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """Shut down server and stop game loop."""
         self.server.shutdown()
